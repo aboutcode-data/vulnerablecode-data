@@ -1,0 +1,319 @@
+vulnerability_id: VCID-24t5-1ybp-aaar
+aliases:
+  - CVE-2021-46910
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  ARM: 9063/1: mm: reduce maximum number of CPUs if DEBUG_KMAP_LOCAL is enabled
+
+  The debugging code for kmap_local() doubles the number of per-CPU fixmap
+  slots allocated for kmap_local(), in order to use half of them as guard
+  regions. This causes the fixmap region to grow downwards beyond the start
+  of its reserved window if the supported number of CPUs is large, and collide
+  with the newly added virtual DT mapping right below it, which is obviously
+  not good.
+
+  One manifestation of this is EFI boot on a kernel built with NR_CPUS=32
+  and CONFIG_DEBUG_KMAP_LOCAL=y, which may pass the FDT in highmem, resulting
+  in block entries below the fixmap region that the fixmap code misidentifies
+  as fixmap table entries, and subsequently tries to dereference using a
+  phys-to-virt translation that is only valid for lowmem. This results in a
+  cryptic splat such as the one below.
+
+    ftrace: allocating 45548 entries in 89 pages
+    8<--- cut here ---
+    Unable to handle kernel paging request at virtual address fc6006f0
+    pgd = (ptrval)
+    [fc6006f0] *pgd=80000040207003, *pmd=00000000
+    Internal error: Oops: a06 [#1] SMP ARM
+    Modules linked in:
+    CPU: 0 PID: 0 Comm: swapper Not tainted 5.11.0+ #382
+    Hardware name: Generic DT based system
+    PC is at cpu_ca15_set_pte_ext+0x24/0x30
+    LR is at __set_fixmap+0xe4/0x118
+    pc : [<c041ac9c>]    lr : [<c04189d8>]    psr: 400000d3
+    sp : c1601ed8  ip : 00400000  fp : 00800000
+    r10: 0000071f  r9 : 00421000  r8 : 00c00000
+    r7 : 00c00000  r6 : 0000071f  r5 : ffade000  r4 : 4040171f
+    r3 : 00c00000  r2 : 4040171f  r1 : c041ac78  r0 : fc6006f0
+    Flags: nZcv  IRQs off  FIQs off  Mode SVC_32  ISA ARM  Segment none
+    Control: 30c5387d  Table: 40203000  DAC: 00000001
+    Process swapper (pid: 0, stack limit = 0x(ptrval))
+
+  So let's limit CONFIG_NR_CPUS to 16 when CONFIG_DEBUG_KMAP_LOCAL=y. Also,
+  fix the BUILD_BUG_ON() check that was supposed to catch this, by checking
+  whether the region grows below the start address rather than above the end
+  address.
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46910.json
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08994'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09056'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09079'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06889'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06877'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06888'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06903'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06894'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06874'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06856'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06819'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08863'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08915'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09027'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09094'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08854'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08932'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08925'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08918'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08922'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08979'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08931'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11351'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11479'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11444'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11442'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11309'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11516'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '0.00205'
+    scoring_system: epss
+    scoring_elements: '0.28593'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46910
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46910
+weaknesses:
+  - CWE-118
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46910.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-46910
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5965ac11b1d5fcb38464728931649cd9df79c7c9
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d624833f5984d484c5e3196f34b926f9e71dafee
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2266414
+    reference_type:
+    reference_id: 2266414
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-46910
+    reference_type:
+    reference_id: CVE-2021-46910

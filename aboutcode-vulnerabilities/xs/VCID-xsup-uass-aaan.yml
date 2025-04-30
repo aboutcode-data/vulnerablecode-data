@@ -1,0 +1,337 @@
+vulnerability_id: VCID-xsup-uass-aaan
+aliases:
+  - CVE-2023-52813
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  crypto: pcrypt - Fix hungtask for PADATA_RESET
+
+  We found a hungtask bug in test_aead_vec_cfg as follows:
+
+  INFO: task cryptomgr_test:391009 blocked for more than 120 seconds.
+  "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+  Call trace:
+   __switch_to+0x98/0xe0
+   __schedule+0x6c4/0xf40
+   schedule+0xd8/0x1b4
+   schedule_timeout+0x474/0x560
+   wait_for_common+0x368/0x4e0
+   wait_for_completion+0x20/0x30
+   wait_for_completion+0x20/0x30
+   test_aead_vec_cfg+0xab4/0xd50
+   test_aead+0x144/0x1f0
+   alg_test_aead+0xd8/0x1e0
+   alg_test+0x634/0x890
+   cryptomgr_test+0x40/0x70
+   kthread+0x1e0/0x220
+   ret_from_fork+0x10/0x18
+   Kernel panic - not syncing: hung_task: blocked tasks
+
+  For padata_do_parallel, when the return err is 0 or -EBUSY, it will call
+  wait_for_completion(&wait->completion) in test_aead_vec_cfg. In normal
+  case, aead_request_complete() will be called in pcrypt_aead_serial and the
+  return err is 0 for padata_do_parallel. But, when pinst->flags is
+  PADATA_RESET, the return err is -EBUSY for padata_do_parallel, and it
+  won't call aead_request_complete(). Therefore, test_aead_vec_cfg will
+  hung at wait_for_completion(&wait->completion), which will cause
+  hungtask.
+
+  The problem comes as following:
+  (padata_do_parallel)                 |
+      rcu_read_lock_bh();              |
+      err = -EINVAL;                   |   (padata_replace)
+                                       |     pinst->flags |= PADATA_RESET;
+      err = -EBUSY                     |
+      if (pinst->flags & PADATA_RESET) |
+          rcu_read_unlock_bh()         |
+          return err
+
+  In order to resolve the problem, we replace the return err -EBUSY with
+  -EAGAIN, which means parallel_data is changing, and the caller should call
+  it again.
+
+  v3:
+  remove retry and just change the return err.
+  v2:
+  introduce padata_try_do_parallel() in pcrypt_aead_encrypt and
+  pcrypt_aead_decrypt to solve the hungtask.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52813.json
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14083'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14371'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14461'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14482'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14548'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14541'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14556'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14611'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14691'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14976'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15033'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15128'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14714'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14726'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15080'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14767'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34667'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34629'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34695'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34763'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34806'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34811'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34724'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34709'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.3471'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34729'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34721'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34691'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.5605'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56041'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56027'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56015'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56033'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56057'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.55941'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.55882'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.55983'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.55987'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.5601'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56028'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.55995'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.0037'
+    scoring_system: epss
+    scoring_elements: '0.56012'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '0.01141'
+    scoring_system: epss
+    scoring_elements: '0.65416'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52813.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52813
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-52813
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/039fec48e062504f14845124a1a25eb199b2ddc0
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/372636debe852913529b1716f44addd94fff2d28
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/546c1796ad1ed0d87dab3c4b5156d75819be2316
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/8f4f68e788c3a7a696546291258bfa5fdb215523
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c55fc098fd9d2dca475b82d00ffbcaf97879d77e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c9c1334697301c10e6918d747ed38abfbc0c96e7
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e134f3aba98e6c801a693f540912c2d493718ddf
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e97bf4ada7dddacd184c3e196bd063b0dc71b41d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/fb2d3a50a8f29a3c66682bb426144f40e32ab818
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2282653
+    reference_type:
+    reference_id: 2282653
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52813
+    reference_type:
+    reference_id: CVE-2023-52813
+  - url: https://access.redhat.com/errata/RHSA-2024:4211
+    reference_type:
+    reference_id: RHSA-2024:4211
+  - url: https://access.redhat.com/errata/RHSA-2024:9315
+    reference_type:
+    reference_id: RHSA-2024:9315

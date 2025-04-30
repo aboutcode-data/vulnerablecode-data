@@ -1,0 +1,252 @@
+vulnerability_id: VCID-52kj-mazu-8ubt
+aliases:
+  - CVE-2025-31130
+  - GHSA-2frx-2596-x5r6
+summary: |
+  gitoxide does not detect SHA-1 collision attacks
+  ### Summary
+  gitoxide uses SHA-1 hash implementations without any collision detection, leaving it vulnerable to hash collision attacks.
+
+  ### Details
+  gitoxide uses the `sha1_smol` or `sha1` crate, both of which implement standard SHA-1 without any mitigations for collision attacks. This means that two distinct Git objects with colliding SHA-1 hashes would break the Git object model and integrity checks when used with gitoxide.
+
+  The SHA-1 function is considered cryptographically insecure. However, in the wake of the SHAttered attacks, this issue was mitigated in Git 2.13.0 in 2017 by using the [sha1collisiondetection](https://github.com/crmarcstevens/sha1collisiondetection) algorithm by default and producing an error when known SHA-1 collisions are detected. Git is in the process of migrating to using SHA-256 for object hashes, but this has not been rolled out widely yet and gitoxide does not support SHA-256 object hashes.
+
+  ### PoC
+  The following program demonstrates the problem, using the two [SHAttered PDFs](https://shattered.io/):
+
+  ```rust
+  use sha1_checked::{CollisionResult, Digest};
+
+  fn sha1_oid_of_file(filename: &str) -> gix::ObjectId {
+      let mut hasher = gix::features::hash::hasher(gix::hash::Kind::Sha1);
+      hasher.update(&std::fs::read(filename).unwrap());
+      gix::ObjectId::Sha1(hasher.digest())
+  }
+
+  fn sha1dc_oid_of_file(filename: &str) -> Result<gix::ObjectId, String> {
+      // Matches Git’s behaviour.
+      let mut hasher = sha1_checked::Builder::default().safe_hash(false).build();
+      hasher.update(&std::fs::read(filename).unwrap());
+      match hasher.try_finalize() {
+          CollisionResult::Ok(digest) => Ok(gix::ObjectId::Sha1(digest.into())),
+          CollisionResult::Mitigated(_) => unreachable!(),
+          CollisionResult::Collision(digest) => Err(format!(
+              "Collision attack: {}",
+              gix::ObjectId::Sha1(digest.into()).to_hex()
+          )),
+      }
+  }
+
+  fn main() {
+      dbg!(sha1_oid_of_file("shattered-1.pdf"));
+      dbg!(sha1_oid_of_file("shattered-2.pdf"));
+      dbg!(sha1dc_oid_of_file("shattered-1.pdf"));
+      dbg!(sha1dc_oid_of_file("shattered-2.pdf"));
+  }
+  ```
+
+  The output is as follows:
+
+  ```
+  [src/main.rs:24:5] sha1_oid_of_file("shattered-1.pdf") = Sha1(38762cf7f55934b34d179ae6a4c80cadccbb7f0a)
+  [src/main.rs:25:5] sha1_oid_of_file("shattered-2.pdf") = Sha1(38762cf7f55934b34d179ae6a4c80cadccbb7f0a)
+  [src/main.rs:26:5] sha1dc_oid_of_file("shattered-1.pdf") = Err(
+      "Collision attack: 38762cf7f55934b34d179ae6a4c80cadccbb7f0a",
+  )
+  [src/main.rs:27:5] sha1dc_oid_of_file("shattered-2.pdf") = Err(
+      "Collision attack: 38762cf7f55934b34d179ae6a4c80cadccbb7f0a",
+  )
+  ```
+
+  The latter behaviour matches Git.
+
+  Since the SHAttered PDFs are not in a valid format for Git objects, a direct proof‐of‐concept using higher‐level APIs cannot be immediately demonstrated without significant computational resources.
+
+  ### Impact
+  An attacker with the ability to mount a collision attack on SHA-1 like the [SHAttered](https://shattered.io/) or [SHA-1 is a Shambles](https://sha-mbles.github.io/) attacks could create two distinct Git objects with the same hash. This is becoming increasingly affordable for well‐resourced attackers, with the Shambles researchers in 2020 estimating $45k for a chosen‐prefix collision or $11k for a classical collision, and projecting less than $10k for a chosen‐prefix collision by 2025. The result could be used to disguise malicious repository contents, or potentially exploit assumptions in the logic of programs using gitoxide to cause further vulnerabilities.
+
+  This vulnerability affects any user of gitoxide, including `gix-*` library crates, that reads or writes Git objects.
+severities:
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.01823'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.01802'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.01805'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.01827'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.01842'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.02932'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.02931'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.02926'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.02927'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.02933'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00462'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00464'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00465'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00467'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00466'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.0047'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00463'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-2frx-2596-x5r6
+  - score: '6.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide
+  - score: '6.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/commit/4660f7a6f71873311f68f170b0f1f6659a02829d
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/commit/4660f7a6f71873311f68f170b0f1f6659a02829d
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-04T14:51:46Z/
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/commit/4660f7a6f71873311f68f170b0f1f6659a02829d
+  - score: '6.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/security/advisories/GHSA-2frx-2596-x5r6
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/security/advisories/GHSA-2frx-2596-x5r6
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/security/advisories/GHSA-2frx-2596-x5r6
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-04T14:51:46Z/
+    published_at: None
+    url: https://github.com/GitoxideLabs/gitoxide/security/advisories/GHSA-2frx-2596-x5r6
+  - score: '6.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:H/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-31130
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-31130
+  - score: '6.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:N/I:H/A:N
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2025-0021.html
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2025-0021.html
+weaknesses:
+  - CWE-328
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-31130
+    reference_type:
+    reference_id:
+  - url: https://github.com/GitoxideLabs/gitoxide
+    reference_type:
+    reference_id:
+  - url: https://github.com/GitoxideLabs/gitoxide/commit/4660f7a6f71873311f68f170b0f1f6659a02829d
+    reference_type:
+    reference_id:
+  - url: https://github.com/GitoxideLabs/gitoxide/security/advisories/GHSA-2frx-2596-x5r6
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-31130
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2025-0021.html
+    reference_type:
+    reference_id:
+  - url: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1103628
+    reference_type:
+    reference_id: 1103628
+  - url: https://github.com/advisories/GHSA-2frx-2596-x5r6
+    reference_type:
+    reference_id: GHSA-2frx-2596-x5r6

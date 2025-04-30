@@ -1,0 +1,138 @@
+vulnerability_id: VCID-bsjc-pya9-huap
+aliases:
+  - CVE-2020-36789
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  can: dev: can_get_echo_skb(): prevent call to kfree_skb() in hard IRQ context
+
+  If a driver calls can_get_echo_skb() during a hardware IRQ (which is often, but
+  not always, the case), the 'WARN_ON(in_irq)' in
+  net/core/skbuff.c#skb_release_head_state() might be triggered, under network
+  congestion circumstances, together with the potential risk of a NULL pointer
+  dereference.
+
+  The root cause of this issue is the call to kfree_skb() instead of
+  dev_kfree_skb_irq() in net/core/dev.c#enqueue_to_backlog().
+
+  This patch prevents the skb to be freed within the call to netif_rx() by
+  incrementing its reference count with skb_get(). The skb is finally freed by
+  one of the in-irq-context safe functions: dev_consume_skb_any() or
+  dev_kfree_skb_any(). The "any" version is used because some drivers might call
+  can_get_echo_skb() in a normal context.
+
+  The reason for this issue to occur is that initially, in the core network
+  stack, loopback skb were not supposed to be received in hardware IRQ context.
+  The CAN stack is an exeption.
+
+  This bug was previously reported back in 2017 in [1] but the proposed patch
+  never got accepted.
+
+  While [1] directly modifies net/core/dev.c, we try to propose here a
+  smoother modification local to CAN network stack (the assumption
+  behind is that only CAN devices are affected by this issue).
+
+  [1] http://lore.kernel.org/r/57a3ffb6-3309-3ad5-5a34-e93c3fe3614d@cetitec.com
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2020-36789.json
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05064'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05038'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05028'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04989'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.0768'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07616'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07683'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07679'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07674'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07685'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-476
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2020-36789.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2020-36789
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-36789
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2283f79b22684d2812e5c76fc2280aae00390365
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/248b71ce92d4f3a574b2537f9838f48e892618f4
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3a922a85701939624484e7f2fd07d32beed00d25
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/451187b20431924d13fcfecc500d7cd2d9951bac
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/7e4cf2ec0ca236c3e5f904239cec6efe1f3baf22
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/87530b557affe01c764de32dbeb58cdf47234574
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ab46748bf98864f9c3f5559060bf8caf9df2b41e
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360782
+    reference_type:
+    reference_id: 2360782
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2020-36789
+    reference_type:
+    reference_id: CVE-2020-36789

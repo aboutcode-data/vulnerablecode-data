@@ -1,0 +1,253 @@
+vulnerability_id: VCID-7361-1dnx-s3be
+aliases:
+  - CVE-2025-22035
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  tracing: Fix use-after-free in print_graph_function_flags during tracer switching
+
+  Kairui reported a UAF issue in print_graph_function_flags() during
+  ftrace stress testing [1]. This issue can be reproduced if puting a
+  'mdelay(10)' after 'mutex_unlock(&trace_types_lock)' in s_start(),
+  and executing the following script:
+
+    $ echo function_graph > current_tracer
+    $ cat trace > /dev/null &
+    $ sleep 5  # Ensure the 'cat' reaches the 'mdelay(10)' point
+    $ echo timerlat > current_tracer
+
+  The root cause lies in the two calls to print_graph_function_flags
+  within print_trace_line during each s_show():
+
+    * One through 'iter->trace->print_line()';
+    * Another through 'event->funcs->trace()', which is hidden in
+      print_trace_fmt() before print_trace_line returns.
+
+  Tracer switching only updates the former, while the latter continues
+  to use the print_line function of the old tracer, which in the script
+  above is print_graph_function_flags.
+
+  Moreover, when switching from the 'function_graph' tracer to the
+  'timerlat' tracer, s_start only calls graph_trace_close of the
+  'function_graph' tracer to free 'iter->private', but does not set
+  it to NULL. This provides an opportunity for 'event->funcs->trace()'
+  to use an invalid 'iter->private'.
+
+  To fix this issue, set 'iter->private' to NULL immediately after
+  freeing it in graph_trace_close(), ensuring that an invalid pointer
+  is not passed to other tracers. Additionally, clean up the unnecessary
+  'iter->private = NULL' during each 'cat trace' when using wakeup and
+  irqsoff tracers.
+
+   [1] https://lore.kernel.org/all/20231112150030.84609-1-ryncsn@gmail.com/
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22035.json
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01292'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01304'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01305'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01302'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01307'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01293'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01288'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08052'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08118'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08101'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08023'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.07983'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+  - score: '6.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/099ef3385800828b74933a96c117574637c3fb3a
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/099ef3385800828b74933a96c117574637c3fb3a
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/42561fe62c3628ea3bc9623f64f047605e98857f
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/42561fe62c3628ea3bc9623f64f047605e98857f
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/70be951bc01e4a0e10d443f3510bb17426f257fb
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/70be951bc01e4a0e10d443f3510bb17426f257fb
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/7f81f27b1093e4895e87b74143c59c055c3b1906
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/7f81f27b1093e4895e87b74143c59c055c3b1906
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/81a85b12132c8ffe98f5ddbdc185481790aeaa1b
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/81a85b12132c8ffe98f5ddbdc185481790aeaa1b
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/a2cce54c1748216535dda02e185d07a084be837e
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/a2cce54c1748216535dda02e185d07a084be837e
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/c85efe6e13743cac6ba4ccf144cb91f44c86231a
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/c85efe6e13743cac6ba4ccf144cb91f44c86231a
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/de7b309139f862a44379ecd96e93c9133c69f813
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/de7b309139f862a44379ecd96e93c9133c69f813
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/f14752d66056d0c7bffe5092130409417d3baa70
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-04-21T14:57:52Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/f14752d66056d0c7bffe5092130409417d3baa70
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22035.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22035
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-22035
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/099ef3385800828b74933a96c117574637c3fb3a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/42561fe62c3628ea3bc9623f64f047605e98857f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/70be951bc01e4a0e10d443f3510bb17426f257fb
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/7f81f27b1093e4895e87b74143c59c055c3b1906
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/81a85b12132c8ffe98f5ddbdc185481790aeaa1b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a2cce54c1748216535dda02e185d07a084be837e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c85efe6e13743cac6ba4ccf144cb91f44c86231a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/de7b309139f862a44379ecd96e93c9133c69f813
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f14752d66056d0c7bffe5092130409417d3baa70
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360210
+    reference_type:
+    reference_id: 2360210
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22035
+    reference_type:
+    reference_id: CVE-2025-22035

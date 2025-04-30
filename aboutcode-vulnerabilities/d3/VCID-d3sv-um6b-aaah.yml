@@ -1,0 +1,40 @@
+vulnerability_id: VCID-d3sv-um6b-aaah
+aliases:
+  - GHSA-g54h-m393-cpwq
+summary: |
+  devices resource list treated as a blacklist by default
+  ### Impact
+  Contrary to the [OCI runtime specification](https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md#device-whitelist), `runc`'s implementation of the `linux.resources.devices` list was a black-list by default. This means that users who created their own `config.json` objects and didn't prefix a deny-all rule (`{"allow": false, "permissions": "rwm"}` or equivalent) were not provided protection by the `devices` cgroup. This would allow malicious containers (with sufficient privileges) to create arbitrary device inodes (assuming they have `CAP_MKNOD`) and operate on any device inodes they may have access to (assuming they have regular Unix DAC permissions).
+
+  However, most (if not all) programs that make use of `runc` include this deny-all rule. This was most likely added before the specification mandated a white-list of devices, and the fact that all programs wrote their own deny-all rule obscured the existence of this bug for several years. In fact, even the specification's examples include a default deny-all rule! We therefore believe that while this is a security bug (and has been fixed as such), it was almost certainly not exploitable in the wild due to the inclusion of default deny-all rules by all known users of `runc` -- hence why this advisory has low severity.
+
+  ### Patches
+  This issue has been fixed in [a patch that was part of a larger rework of the devices cgroup code in runc](https://github.com/opencontainers/runc/pull/2391) -- which lead to the discovery of this security bug. Users should upgrade to 1.0.0-rc91 as soon as it is released, or wait for your distribution to backport the relevant fixes.
+
+  ### Workarounds
+  If you are using `runc` directly, ensure that there is a deny-all entry at the beginning of `linux.resources.devices` -- such an entry would look like `{"allow": false, "permissions": "rwm"}` (all other fields are ignored, though `type` must be set to `"a"` or `null` if it is present).
+
+  Users which consume `runc` through another program should check whether their containers are operating under a white-list -- this can be done by reading `/sys/fs/cgroup/devices/devices.list` inside the container. If the file contains only the entry `a *:* rwm` (meaning the cgroup is in black-list mode, which likely means "allow all device access") then your containers are vulnerable to this issue.
+
+  As always, we recommend **in the strongest possible terms** that all of our users enable user namespaces on all of their workloads (or pressure their vendors to do so). User namespaces are one of the most significant defense-in-depth protections you can enable for containers, and have prevented many container-related vulnerabilities (both kernel 0days as well as bugs in container runtimes, such as this one).
+
+  ### References
+  * https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/devices.html
+  * [opencontainers/runtime-spec/config-linux.md#device-whitelist](https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md#device-whitelist)
+  * https://github.com/opencontainers/runc/pull/2391
+
+  ### For more information
+  If you have any questions or comments about this advisory:
+  * [Open an issue in this repo](https://github.com/opencontainers/runc/issues/new).
+  * Email us at <security@opencontainers.org>.
+severities:
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/opencontainers/runc/security/advisories/GHSA-g54h-m393-cpwq
+weaknesses: []
+references:
+  - url: https://github.com/opencontainers/runc/security/advisories/GHSA-g54h-m393-cpwq
+    reference_type:
+    reference_id:

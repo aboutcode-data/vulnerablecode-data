@@ -1,0 +1,368 @@
+vulnerability_id: VCID-mthe-kfjp-aaan
+aliases:
+  - CVE-2024-41109
+  - GHSA-fx6j-9pp6-ph36
+summary: |
+  Pimcore vulnerable to disclosure of system and database information behind /admin firewall
+  ### Summary
+
+  Navigating to `/admin/index/statistics` with a **logged in Pimcore user** (not an XmlHttpRequest because of this check: [IndexController:125](https://github.com/pimcore/admin-ui-classic-bundle/blob/1.x/src/Controller/Admin/IndexController.php#L125C24-L125C40)) exposes information about the Pimcore installation, PHP version, MYSQL version, installed bundles and all database tables and their row count in the system.
+
+  > The web server should not return any product and version information of the components used. The table names and row counts should not be exposed.
+
+  ### Details
+
+  `/admin/index/statistics` returns the following JSON-response:
+  ```
+  {
+      {
+          "instanceId": "...",
+          "pimcore_major_version": 11,
+          "pimcore_version": "v11.3.1",
+          "pimcore_hash": "3ecd39f21dbdd25ffdf4bec6e2c860eccfd3d008",
+          "pimcore_platform_version": "v2024.2",
+          "php_version": "8.3.8",
+          "mysql_version": "10.11.8-MariaDB-ubu2204",
+      "bundles": [
+          // all installed bundles
+      ],
+      "tables": [
+          // all tables and their row count, e.g:
+          {
+              "name": "users",
+              "rows": 2
+          },
+      ]
+  }
+  ```
+
+  Information about the Pimcore Version can also be seen here:
+
+  In a current Version:
+  ![[image](https://github.com/user-attachments/assets/f0f478da-ceca-4bd5-a391-3fe8458fa3d2)](https://github.com/user-attachments/assets/f0f478da-ceca-4bd5-a391-3fe8458fa3d2)
+  ![[image](https://github.com/user-attachments/assets/152f6ad7-2cb3-42eb-bf05-1066a3496d59)](https://github.com/user-attachments/assets/152f6ad7-2cb3-42eb-bf05-1066a3496d59)
+
+  In Pimcore Version 10.6.9:
+  ![[image](https://github.com/user-attachments/assets/907fb8d8-81b3-450f-bdb0-3e6193bfc243)](https://github.com/user-attachments/assets/907fb8d8-81b3-450f-bdb0-3e6193bfc243)
+  ![[image](https://github.com/user-attachments/assets/c4d89b88-f458-4023-a29f-d2ef652b2c3b)](https://github.com/user-attachments/assets/c4d89b88-f458-4023-a29f-d2ef652b2c3b)
+
+  ### PoC
+
+  - [[Demo App](https://demo.pimcore.fun/admin)](https://demo.pimcore.fun/admin) with credentials user: admin and pass: demo
+  - Watching Network-Tab in Developer-Tools and looking for `/admin/index/statistics`
+
+  ### Impact
+
+  Only for logged in Pimcore users possible.
+
+  ### Workaround and Patch
+
+  We patched the following additional check for Pimcore v10.6.9. This uses an app-specific class but any user permission would be ok.
+  This resolves navigating to `/admin/index/statistics`.
+
+  ```patch
+  diff --git a/vendor/pimcore/pimcore/bundles/AdminBundle/Controller/Admin/IndexController.php b/vendor/pimcore/pimcore/bundles/AdminBundle/Controller/Admin/IndexController.php
+  --- a/vendor/pimcore/pimcore/bundles/AdminBundle/Controller/Admin/IndexController.php    (revision dd81ef4c666b18c254333867a60f6ed455025076)
+  +++ b/vendor/pimcore/pimcore/bundles/AdminBundle/Controller/Admin/IndexController.php    (date 1721225746781)
+  @@ -15,6 +15,7 @@
+
+  namespace Pimcore\Bundle\AdminBundle\Controller\Admin;
+
+  +use App\Constant\UserPermission;
+  use Doctrine\DBAL\Connection;
+  use Exception;
+  use Pimcore\Analytics\Google\Config\SiteConfigProvider;
+  @@ -142,6 +143,12 @@
+  throw $this->createAccessDeniedHttpException();
+  }
+
+  +        $user = $this->tokenResolver->getUser();
+  +
+  +        if (!$user->isAdmin() && !$user->isAllowed(UserPermission::ADMIN_INDEX_VIEW)) {
+  +            throw $this->createAccessDeniedException();
+  +        }
+  +
+  // DB
+  try {
+  $tables = $db->fetchAllAssociative('SELECT TABLE_NAME as name,TABLE_ROWS as `rows` from information_schema.TABLES
+  ````
+
+  For the Pimcore versions in the UI we used the IndexActionSettingsEvent. This works for Versions < Pimcore 11:
+
+  ```php
+  <?php
+
+  namespace App\EventListener\Admin;
+
+  use App\Constant\UserPermission;
+  use Pimcore\Bundle\AdminBundle\Event\AdminEvents;
+  use Pimcore\Event\Admin\IndexActionSettingsEvent;
+  use Pimcore\Security\User\TokenStorageUserResolver;
+  use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+
+  /**
+  * @deprecated and cannot be used in Pimcore 11
+  */
+  class PimcoreVersionUIGuardSubscriber implements EventSubscriberInterface
+  {
+      public function __construct(private readonly TokenStorageUserResolver $tokenResolver)
+      {
+      }
+
+      public static function getSubscribedEvents()
+      {
+          return [
+              AdminEvents::INDEX_ACTION_SETTINGS => ['onIndexActionSettingsEvent'],
+          ];
+      }
+
+      public function onIndexActionSettingsEvent(IndexActionSettingsEvent $event): void
+      {
+          $user = $this->tokenResolver->getUser();
+          if ($user->isAdmin() || $user->isAllowed(UserPermission::ADMIN_INDEX_VIEW)) {
+              return;
+          }
+
+          $settings = $event->getSettings();
+          $settings['instanceId'] = '';
+          $settings['version'] = '';
+          $settings['build'] = '';
+          $event->setSettings($settings);
+      }
+  }
+  ```
+severities:
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00185'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00183'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00184'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00164'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00166'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00099'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 4e-05
+    scoring_system: epss
+    scoring_elements: '0.00167'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.0021'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00178'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00177'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00176'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00174'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-fx6j-9pp6-ph36
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/blob/1.x/src/Controller/Admin/IndexController.php#L125C24-L125C40
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/blob/1.x/src/Controller/Admin/IndexController.php#L125C24-L125C40
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/commit/afa10bff2f8bfe9c8af7b6b75885bc403f6984f0
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/commit/afa10bff2f8bfe9c8af7b6b75885bc403f6984f0
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/releases/tag/v1.5.2
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/releases/tag/v1.5.2
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/security/advisories/GHSA-fx6j-9pp6-ph36
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pimcore/admin-ui-classic-bundle/security/advisories/GHSA-fx6j-9pp6-ph36
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-41109
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-41109
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-200
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-41109
+    reference_type:
+    reference_id:
+  - url: https://github.com/pimcore/admin-ui-classic-bundle
+    reference_type:
+    reference_id:
+  - url: https://github.com/pimcore/admin-ui-classic-bundle/blob/1.x/src/Controller/Admin/IndexController.php#L125C24-L125C40
+    reference_type:
+    reference_id:
+  - url: https://github.com/pimcore/admin-ui-classic-bundle/commit/afa10bff2f8bfe9c8af7b6b75885bc403f6984f0
+    reference_type:
+    reference_id:
+  - url: https://github.com/pimcore/admin-ui-classic-bundle/releases/tag/v1.5.2
+    reference_type:
+    reference_id:
+  - url: https://github.com/pimcore/admin-ui-classic-bundle/security/advisories/GHSA-fx6j-9pp6-ph36
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-41109
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-fx6j-9pp6-ph36
+    reference_type:
+    reference_id: GHSA-fx6j-9pp6-ph36

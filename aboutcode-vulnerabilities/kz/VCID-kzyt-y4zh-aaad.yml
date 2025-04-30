@@ -1,0 +1,352 @@
+vulnerability_id: VCID-kzyt-y4zh-aaad
+aliases:
+  - CVE-2021-47128
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  bpf, lockdown, audit: Fix buggy SELinux lockdown permission checks
+
+  Commit 59438b46471a ("security,lockdown,selinux: implement SELinux lockdown")
+  added an implementation of the locked_down LSM hook to SELinux, with the aim
+  to restrict which domains are allowed to perform operations that would breach
+  lockdown. This is indirectly also getting audit subsystem involved to report
+  events. The latter is problematic, as reported by Ondrej and Serhei, since it
+  can bring down the whole system via audit:
+
+    1) The audit events that are triggered due to calls to security_locked_down()
+       can OOM kill a machine, see below details [0].
+
+    2) It also seems to be causing a deadlock via avc_has_perm()/slow_avc_audit()
+       when trying to wake up kauditd, for example, when using trace_sched_switch()
+       tracepoint, see details in [1]. Triggering this was not via some hypothetical
+       corner case, but with existing tools like runqlat & runqslower from bcc, for
+       example, which make use of this tracepoint. Rough call sequence goes like:
+
+       rq_lock(rq) -> -------------------------+
+         trace_sched_switch() ->               |
+           bpf_prog_xyz() ->                   +-> deadlock
+             selinux_lockdown() ->             |
+               audit_log_end() ->              |
+                 wake_up_interruptible() ->    |
+                   try_to_wake_up() ->         |
+                     rq_lock(rq) --------------+
+
+  What's worse is that the intention of 59438b46471a to further restrict lockdown
+  settings for specific applications in respect to the global lockdown policy is
+  completely broken for BPF. The SELinux policy rule for the current lockdown check
+  looks something like this:
+
+    allow <who> <who> : lockdown { <reason> };
+
+  However, this doesn't match with the 'current' task where the security_locked_down()
+  is executed, example: httpd does a syscall. There is a tracing program attached
+  to the syscall which triggers a BPF program to run, which ends up doing a
+  bpf_probe_read_kernel{,_str}() helper call. The selinux_lockdown() hook does
+  the permission check against 'current', that is, httpd in this example. httpd
+  has literally zero relation to this tracing program, and it would be nonsensical
+  having to write an SELinux policy rule against httpd to let the tracing helper
+  pass. The policy in this case needs to be against the entity that is installing
+  the BPF program. For example, if bpftrace would generate a histogram of syscall
+  counts by user space application:
+
+    bpftrace -e 'tracepoint:raw_syscalls:sys_enter { @[comm] = count(); }'
+
+  bpftrace would then go and generate a BPF program from this internally. One way
+  of doing it [for the sake of the example] could be to call bpf_get_current_task()
+  helper and then access current->comm via one of bpf_probe_read_kernel{,_str}()
+  helpers. So the program itself has nothing to do with httpd or any other random
+  app doing a syscall here. The BPF program _explicitly initiated_ the lockdown
+  check. The allow/deny policy belongs in the context of bpftrace: meaning, you
+  want to grant bpftrace access to use these helpers, but other tracers on the
+  system like my_random_tracer _not_.
+
+  Therefore fix all three issues at the same time by taking a completely different
+  approach for the security_locked_down() hook, that is, move the check into the
+  program verification phase where we actually retrieve the BPF func proto. This
+  also reliably gets the task (current) that is trying to install the BPF tracing
+  program, e.g. bpftrace/bcc/perf/systemtap/etc, and it also fixes the OOM since
+  we're moving this out of the BPF helper's fast-path which can be called several
+  millions of times per second.
+
+  The check is then also in line with other security_locked_down() hooks in the
+  system where the enforcement is performed at open/load time, for example,
+  open_kcore() for /proc/kcore access or module_sig_check() for module signatures
+  just to pick f
+  ---truncated---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47128.json
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01577'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01594'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.01601'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07108'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05446'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05418'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05441'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05453'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05472'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05457'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05464'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0546'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05465'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05473'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0545'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05437'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05398'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0706'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07088'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07182'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07191'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07179'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07161'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07135'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '0.00128'
+    scoring_system: epss
+    scoring_elements: '0.20286'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00509'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00543'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-47128
+weaknesses:
+  - CWE-667
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47128.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47128
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-47128
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/acc43fc6cf0d50612193813c5906a1ab9d433e1e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ff40e51043af63715ab413995ff46996ecf9583f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ff5039ec75c83d2ed5b781dc7733420ee8c985fc
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2269831
+    reference_type:
+    reference_id: 2269831
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47128
+    reference_type:
+    reference_id: CVE-2021-47128

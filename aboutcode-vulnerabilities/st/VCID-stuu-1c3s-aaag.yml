@@ -1,0 +1,330 @@
+vulnerability_id: VCID-stuu-1c3s-aaag
+aliases:
+  - CVE-2024-32880
+  - GHSA-3f7w-p8vr-4v5f
+summary: "pyLoad allows upload to arbitrary folder lead to RCE\n### Summary\nAn authenticated\
+  \ user can change the download folder and upload a crafted template to the specified folder\
+  \ lead to remote code execution\n\n### Details\nexample version: 0.5\nfile:src/pyload/webui/app/blueprints/app_blueprint.py\n\
+  ```python\n@bp.route(\"/render/<path:filename>\", endpoint=\"render\")\ndef render(filename):\n\
+  \    mimetype = mimetypes.guess_type(filename)[0] or \"text/html\"\n    data = render_template(filename)\n\
+  \    return flask.Response(data, mimetype=mimetype)\n```\nSo, if we can control file in the\
+  \ path \"pyload/webui/app/templates\" in latest version and path in \"module/web/media/js\"\
+  (the difference is the older version0.4.20 only renders file with  extension name \".js\"\
+  ), the render_template func will works like SSTI(server-side template injection) when render\
+  \ the evil file we control.\n\nin /settings page and the choose option general/general, where\
+  \ we can change the download folder. \n![image](https://github.com/pyload/pyload/assets/48705773/0b239138-9aaa-45c4-bf84-c1c3103c452a)\n\
+  \nAlso, we can find the pyLoad install folder in /info page\n![image](https://github.com/pyload/pyload/assets/48705773/6e9d363a-f0e0-4d25-92b3-b1587188a235)\n\
+  So, we can change the  value of Download folder to the template path. Then through /json/add_package\
+  \ we can upload a crafted template file to RCE.\n```python\n@bp.route(\"/json/add_package\"\
+  , methods=[\"POST\"], endpoint=\"add_package\")\n# @apiver_check\n@login_required(\"ADD\"\
+  )\ndef add_package():\n    api = flask.current_app.config[\"PYLOAD_API\"]\n\n    package_name\
+  \ = flask.request.form.get(\"add_name\", \"New Package\").strip()\n    queue = int(flask.request.form[\"\
+  add_dest\"])\n    links = [l.strip() for l in flask.request.form[\"add_links\"].splitlines()]\n\
+  \    pw = flask.request.form.get(\"add_password\", \"\").strip(\"\\n\\r\")\n\n    try:\n \
+  \       file = flask.request.files[\"add_file\"]\n\n        if file.filename:\n          \
+  \  if not package_name or package_name == \"New Package\":\n                package_name =\
+  \ file.filename\n\n            file_path = os.path.join(\n                api.get_config_value(\"\
+  general\", \"storage_folder\"), \"tmp_\" + file.filename\n            )\n            file.save(file_path)\n\
+  \            links.insert(0, file_path)\n\n    except Exception:\n        pass\n\n    urls\
+  \ = [url for url in links if url.strip()]\n    pack = api.add_package(package_name, urls,\
+  \ queue)\n    if pw:\n        data = {\"password\": pw}\n        api.set_package_data(pack,\
+  \ data)\n\n    return jsonify(True)\n```\n### PoC\nFirst login into the admin page, then visit\
+  \ the info page to get the path of pyload installation folder.\nSecond, change the download\
+  \ folder to PYLOAD_INSTALL_DIR/ webui/app/templates/\nThird, upload crafted template file\
+  \ through /json/add_package through parameter add_file\nthe content of crafted template file\
+  \ and its filename is \"341.html\":\n```\n{{x.__init__.__globals__['__builtins__']['eval'](\"\
+  __import__('os').popen('whoami').read()\")}}\n```\n![image](https://github.com/pyload/pyload/assets/48705773/a933a95b-bb18-4e2e-a442-973585e7d1fc)\n\
+  Last, visit http://TARGET/render/tmp_341.html to trigger the RCE\n![image](https://github.com/pyload/pyload/assets/48705773/80a1ba00-2774-4ce5-bc9e-dd32f189634e)\n\
+  ![image](https://github.com/pyload/pyload/assets/48705773/136236f2-9b00-4506-a8ac-29a14a537bbe)\n\
+  \n### Impact\nIt is a RCE vulnerability and I think it affects all versions. In earlier version\
+  \ 0.4.20, the trigger difference is the pyload installation folder path difference and the\
+  \ upload file must with extension \".js\"  .\nThe render js code in version 0.4.20:\n```python\n\
+  @route(\"/media/js/<path:re:.+\\.js>\")\ndef js_dynamic(path):\n    response.headers['Expires']\
+  \ = time.strftime(\"%a, %d %b %Y %H:%M:%S GMT\",\n                                       \
+  \         time.gmtime(time.time() + 60 * 60 * 24 * 2))\n    response.headers['Cache-control']\
+  \ = \"public\"\n    response.headers['Content-Type'] = \"text/javascript; charset=UTF-8\"\n\
+  \n    try:\n        # static files are not rendered\n        if \"static\" not in path and\
+  \ \"mootools\" not in path:\n            t = env.get_template(\"js/%s\" % path)\n        \
+  \    return t.render()\n        else:\n            return static_file(path, root=join(PROJECT_DIR,\
+  \ \"media\", \"js\"))\n    except:\n        return HTTPError(404, \"Not Found\")\n```"
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49425'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49382'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49344'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49392'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49451'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49472'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49471'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49358'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49388'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49414'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49436'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49422'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.00262'
+    scoring_system: epss
+    scoring_elements: '0.49407'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75268'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75156'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75153'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75243'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75247'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75267'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75275'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75259'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75262'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75284'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75291'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75295'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75292'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.7528'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.75277'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: '0.05883'
+    scoring_system: epss
+    scoring_elements: '0.83885'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-3f7w-p8vr-4v5f
+  - score: '9.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/pyload/pyload
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pyload/pyload
+  - score: '9.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/pyload/pyload/security/advisories/GHSA-3f7w-p8vr-4v5f
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/pyload/pyload/security/advisories/GHSA-3f7w-p8vr-4v5f
+  - score: '9.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-32880
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-32880
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-434
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-32880
+    reference_type:
+    reference_id:
+  - url: https://github.com/pyload/pyload
+    reference_type:
+    reference_id:
+  - url: https://github.com/pyload/pyload/security/advisories/GHSA-3f7w-p8vr-4v5f
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-32880
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-3f7w-p8vr-4v5f
+    reference_type:
+    reference_id: GHSA-3f7w-p8vr-4v5f

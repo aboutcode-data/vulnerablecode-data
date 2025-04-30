@@ -1,0 +1,221 @@
+vulnerability_id: VCID-8t4k-tygn-z3be
+aliases:
+  - CVE-2023-52934
+summary: "In the Linux kernel, the following vulnerability has been resolved:  mm/MADV_COLLAPSE:\
+  \ catch !none !huge !bad pmd lookups  In commit 34488399fa08 (\"mm/madvise: add file and shmem\
+  \ support to MADV_COLLAPSE\") we make the following change to find_pmd_or_thp_or_none(): \
+  \ \t-       if (!pmd_present(pmde)) \t-               return SCAN_PMD_NULL; \t+       if (pmd_none(pmde))\
+  \ \t+               return SCAN_PMD_NONE;  This was for-use by MADV_COLLAPSE file/shmem codepaths,\
+  \ where MADV_COLLAPSE might identify a pte-mapped hugepage, only to have khugepaged race-in,\
+  \ free the pte table, and clear the pmd.  Such codepaths include:  A) If we find a suitably-aligned\
+  \ compound page of order HPAGE_PMD_ORDER    already in the pagecache. B) In retract_page_tables(),\
+  \ if we fail to grab mmap_lock for the target    mm/address.  In these cases, collapse_pte_mapped_thp()\
+  \ really does expect a none (not just !present) pmd, and we want to suitably identify that\
+  \ case separate from the case where no pmd is found, or it's a bad-pmd (of course, many things\
+  \ could happen once we drop mmap_lock, and the pmd could plausibly undergo multiple transitions\
+  \ due to intervening fault, split, etc).  Regardless, the code is prepared install a huge-pmd\
+  \ only when the existing pmd entry is either a genuine pte-table-mapping-pmd, or the none-pmd.\
+  \  However, the commit introduces a logical hole; namely, that we've allowed !none- && !huge-\
+  \ && !bad-pmds to be classified as genuine pte-table-mapping-pmds.  One such example that\
+  \ could leak through are swap entries.  The pmd values aren't checked again before use in\
+  \ pte_offset_map_lock(), which is expecting nothing less than a genuine pte-table-mapping-pmd.\
+  \  We want to put back the !pmd_present() check (below the pmd_none() check), but need to\
+  \ be careful to deal with subtleties in pmd transitions and treatments by various arch.  The\
+  \ issue is that __split_huge_pmd_locked() temporarily clears the present bit (or otherwise\
+  \ marks the entry as invalid), but pmd_present() and pmd_trans_huge() still need to return\
+  \ true while the pmd is in this transitory state.  For example, x86's pmd_present() also checks\
+  \ the _PAGE_PSE , riscv's version also checks the _PAGE_LEAF bit, and arm64 also checks a\
+  \ PMD_PRESENT_INVALID bit.  Covering all 4 cases for x86 (all checks done on the same pmd\
+  \ value):  1) pmd_present() && pmd_trans_huge()    All we actually know here is that the PSE\
+  \ bit is set. Either:    a) We aren't racing with __split_huge_page(), and PRESENT or PROTNONE\
+  \       is set.       => huge-pmd    b) We are currently racing with __split_huge_page().\
+  \  The danger here       is that we proceed as-if we have a huge-pmd, but really we are  \
+  \     looking at a pte-mapping-pmd.  So, what is the risk of this       danger?        The\
+  \ only relevant path is:  \tmadvise_collapse() -> collapse_pte_mapped_thp()        Where we\
+  \ might just incorrectly report back \"success\", when really       the memory isn't pmd-backed.\
+  \  This is fine, since split could       happen immediately after (actually) successful madvise_collapse().\
+  \       So, it should be safe to just assume huge-pmd here.  2) pmd_present() && !pmd_trans_huge()\
+  \    Either:    a) PSE not set and either PRESENT or PROTNONE is.       => pte-table-mapping\
+  \ pmd (or PROT_NONE)    b) devmap.  This routine can be called immediately after       unlocking/locking\
+  \ mmap_lock -- or called with no locks held (see       khugepaged_scan_mm_slot()), so previous\
+  \ VMA checks have since been       invalidated.  3) !pmd_present() && pmd_trans_huge()   Not\
+  \ possible.  4) !pmd_present() && !pmd_trans_huge()   Neither PRESENT nor PROTNONE set   =>\
+  \ not present  I've checked all archs that implement pmd_trans_huge() (arm64, riscv, powerpc,\
+  \ longarch, x86, mips, s390) and this logic roughly translates (though devmap treatment is\
+  \ unique to x86 and powerpc, and (3) doesn't necessarily hold in general -- but that doesn't\
+  \ matter since !pmd_present() always takes failure path).  Also, add a comment above find_pmd_or_thp_or_none()\
+  \ ---truncated---"
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52934.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02328'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02395'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.01692'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03592'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03606'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.0361'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03626'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03657'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03663'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03664'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03656'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03645'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04605'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04634'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04666'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04645'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04646'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04629'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04621'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04576'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04579'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04581'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04585'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04593'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03601'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03591'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.03589'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05142'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52934.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52934
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/96aaaf8666010a39430cecf8a65c7ce2908a030f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/edb5d0cf5525357652aff6eacd9850b8ced07143
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2355463
+    reference_type:
+    reference_id: 2355463
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52934
+    reference_type:
+    reference_id: CVE-2023-52934

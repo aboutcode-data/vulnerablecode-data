@@ -1,0 +1,325 @@
+vulnerability_id: VCID-vncp-8d6n-aaag
+aliases:
+  - CVE-2024-39897
+  - GHSA-55r9-5mx9-qq7r
+summary: |
+  Cache driver GetBlob() allows read access to any blob without access control check
+  ### Summary
+
+  Cache driver `GetBlob()` allows read access to any blob without access control check
+
+  ### Details
+
+  If a Zot `accessControl` policy allows users read access to some repositories but restricts read access to other repositories and `dedupe` is enabled (it is enabled by default), then an attacker who knows the name of an image and the digest of a blob (that they do not have read access to), they may maliciously read it via a second repository they do have read access to. This allows an attacker to read an image that the `accessControl` policy denies.
+
+  This attack is possible because [`ImageStore.CheckBlob()` calls `checkCacheBlob()`](https://github.com/project-zot/zot/blob/v2.1.0-rc2/pkg/storage/imagestore/imagestore.go#L1158-L1159) to find the blob a global cache by searching for the digest. If it is found, it is copied to the user requested repository with `copyBlob()`.
+
+  This cache behavior is intentionally used in [`RouteHandler.CreateBlobUpload()`](https://github.com/project-zot/zot/blob/v2.1.0-rc2/pkg/api/routes.go#L1194-L1197) to implement cross repository blob mount (`POST /v2/<name>/blobs/uploads/?mount=<digest>&from=<repository name>`) in Zot. This is still missing an access control to check read access on the source repository.
+
+  This cache behavior is unexpectedly also used in [`RouteHandler.CheckBlob()`](https://github.com/project-zot/zot/blob/v2.1.0-rc2/pkg/api/routes.go#L886) too for `HEAD /v2/<name>/blobs/<digest>`. If a blob is requested that does not exist on the requested repository, Zot will search for it in a global cache (possibly returning a result from an from an incorrect repository) and then will store it into the `ImageStore` for the requested repository.
+
+  [`RouteHandler.GetBlob()`](https://github.com/project-zot/zot/blob/v2.1.0-rc2/pkg/api/routes.go#L1000) does _not_ call `ImageStore.CheckBlob()` so it is not directly vulnerable. However an attacker with only limited read access may first call `CheckBlob()` to fetch the blob from the cache, then call `GetBlob()` to read the blob.
+
+  ### Mitigation
+
+  The attack may be mitigated by configuring `"dedupe": false` in the `"storage"` settings. This disables Zot's cache drivers. `dedupe` is enabled by default using the BoltDB cache driver.
+
+  ### Impact
+
+  An attacker can read images that the `accessControl` policy denies if they have read access to any other second repository.
+
+  This attack only allows accessing blobs (both config and layers) by digest. Manifests cannot be accessed.
+
+  This attack requires the attacker to know the name of a private image and its layer digests. A scenario where this might happen is if a project has public CI build logs but publishes the image to a private repository. Many image build tools log layer digests.
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26767'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26721'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26676'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26612'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.2668'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26681'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26684'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26702'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26722'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.26765'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00096'
+    scoring_system: epss
+    scoring_elements: '0.28159'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00096'
+    scoring_system: epss
+    scoring_elements: '0.28198'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00096'
+    scoring_system: epss
+    scoring_elements: '0.28153'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00096'
+    scoring_system: epss
+    scoring_elements: '0.2818'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.0011'
+    scoring_system: epss
+    scoring_elements: '0.26496'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.0011'
+    scoring_system: epss
+    scoring_elements: '0.26388'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.0011'
+    scoring_system: epss
+    scoring_elements: '0.26341'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.0011'
+    scoring_system: epss
+    scoring_elements: '0.26515'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26912'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26948'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26951'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26921'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26919'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26899'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26875'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26872'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26904'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26945'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.00113'
+    scoring_system: epss
+    scoring_elements: '0.26941'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '0.0023'
+    scoring_system: epss
+    scoring_elements: '0.31138'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+  - score: '4.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/project-zot/zot
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/project-zot/zot
+  - score: '4.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/project-zot/zot/commit/aaee0220e46bdadd12115ac67c19f9d3153eb1df
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/project-zot/zot/commit/aaee0220e46bdadd12115ac67c19f9d3153eb1df
+  - score: '4.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/project-zot/zot/security/advisories/GHSA-55r9-5mx9-qq7r
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/project-zot/zot/security/advisories/GHSA-55r9-5mx9-qq7r
+  - score: '4.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-39897
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-39897
+weaknesses:
+  - CWE-639
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-39897
+    reference_type:
+    reference_id:
+  - url: https://github.com/project-zot/zot
+    reference_type:
+    reference_id:
+  - url: https://github.com/project-zot/zot/commit/aaee0220e46bdadd12115ac67c19f9d3153eb1df
+    reference_type:
+    reference_id:
+  - url: https://github.com/project-zot/zot/security/advisories/GHSA-55r9-5mx9-qq7r
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-39897
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:zotregistry:zot:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:zotregistry:zot:*:*:*:*:*:*:*:*

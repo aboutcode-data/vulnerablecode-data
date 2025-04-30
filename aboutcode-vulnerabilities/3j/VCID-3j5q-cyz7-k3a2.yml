@@ -1,0 +1,143 @@
+vulnerability_id: VCID-3j5q-cyz7-k3a2
+aliases:
+  - CVE-2025-22065
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  idpf: fix adapter NULL pointer dereference on reboot
+
+  With SRIOV enabled, idpf ends up calling into idpf_remove() twice.
+  First via idpf_shutdown() and then again when idpf_remove() calls into
+  sriov_disable(), because the VF devices use the idpf driver, hence the
+  same remove routine. When that happens, it is possible for the adapter
+  to be NULL from the first call to idpf_remove(), leading to a NULL
+  pointer dereference.
+
+  echo 1 > /sys/class/net/<netif>/device/sriov_numvfs
+  reboot
+
+  BUG: kernel NULL pointer dereference, address: 0000000000000020
+  ...
+  RIP: 0010:idpf_remove+0x22/0x1f0 [idpf]
+  ...
+  ? idpf_remove+0x22/0x1f0 [idpf]
+  ? idpf_remove+0x1e4/0x1f0 [idpf]
+  pci_device_remove+0x3f/0xb0
+  device_release_driver_internal+0x19f/0x200
+  pci_stop_bus_device+0x6d/0x90
+  pci_stop_and_remove_bus_device+0x12/0x20
+  pci_iov_remove_virtfn+0xbe/0x120
+  sriov_disable+0x34/0xe0
+  idpf_sriov_configure+0x58/0x140 [idpf]
+  idpf_remove+0x1b9/0x1f0 [idpf]
+  idpf_shutdown+0x12/0x30 [idpf]
+  pci_device_shutdown+0x35/0x60
+  device_shutdown+0x156/0x200
+  ...
+
+  Replace the direct idpf_remove() call in idpf_shutdown() with
+  idpf_vc_core_deinit() and idpf_deinit_dflt_mbx(), which perform
+  the bulk of the cleanup, such as stopping the init task, freeing IRQs,
+  destroying the vports and freeing the mailbox. This avoids the calls to
+  sriov_disable() in addition to a small netdev cleanup, and destroying
+  workqueues, which don't seem to be required on shutdown.
+severities:
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22065.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02921'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02932'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02912'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02911'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02933'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04642'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04605'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04634'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04629'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04636'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04637'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.0465'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+  - score: '4.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22065.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22065
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/4c9106f4906a85f6b13542d862e423bcdc118cc3
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/79618e952ef4dfa1a17ee0631d5549603fab58d8
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/88a6d562e92a295648f8636acf2a6aa714241771
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9fc9b3dc0d0c189ed205acf1e5fbd73e0becc4d6
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360261
+    reference_type:
+    reference_id: 2360261
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22065
+    reference_type:
+    reference_id: CVE-2025-22065

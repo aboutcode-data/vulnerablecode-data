@@ -1,0 +1,335 @@
+vulnerability_id: VCID-ppyh-dx15-aaam
+aliases:
+  - CVE-2023-52611
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  wifi: rtw88: sdio: Honor the host max_req_size in the RX path
+
+  Lukas reports skb_over_panic errors on his Banana Pi BPI-CM4 which comes
+  with an Amlogic A311D (G12B) SoC and a RTL8822CS SDIO wifi/Bluetooth
+  combo card. The error he observed is identical to what has been fixed
+  in commit e967229ead0e ("wifi: rtw88: sdio: Check the HISR RX_REQUEST
+  bit in rtw_sdio_rx_isr()") but that commit didn't fix Lukas' problem.
+
+  Lukas found that disabling or limiting RX aggregation works around the
+  problem for some time (but does not fully fix it). In the following
+  discussion a few key topics have been discussed which have an impact on
+  this problem:
+  - The Amlogic A311D (G12B) SoC has a hardware bug in the SDIO controller
+    which prevents DMA transfers. Instead all transfers need to go through
+    the controller SRAM which limits transfers to 1536 bytes
+  - rtw88 chips don't split incoming (RX) packets, so if a big packet is
+    received this is forwarded to the host in it's original form
+  - rtw88 chips can do RX aggregation, meaning more multiple incoming
+    packets can be pulled by the host from the card with one MMC/SDIO
+    transfer. This Depends on settings in the REG_RXDMA_AGG_PG_TH
+    register (BIT_RXDMA_AGG_PG_TH limits the number of packets that will
+    be aggregated, BIT_DMA_AGG_TO_V1 configures a timeout for aggregation
+    and BIT_EN_PRE_CALC makes the chip honor the limits more effectively)
+
+  Use multiple consecutive reads in rtw_sdio_read_port() and limit the
+  number of bytes which are copied by the host from the card in one
+  MMC/SDIO transfer. This allows receiving a buffer that's larger than
+  the hosts max_req_size (number of bytes which can be transferred in
+  one MMC/SDIO transfer). As a result of this the skb_over_panic error
+  is gone as the rtw88 driver is now able to receive more than 1536 bytes
+  from the card (either because the incoming packet is larger than that
+  or because multiple packets have been aggregated).
+
+  In case of an receive errors (-EILSEQ has been observed by Lukas) we
+  need to drain the remaining data from the card's buffer, otherwise the
+  card will return corrupt data for the next rtw_sdio_read_port() call.
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52611.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14165'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14013'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14071'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14249'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14251'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14218'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14184'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14175'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14154'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14162'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14182'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19456'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19485'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19519'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19508'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19475'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19422'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19489'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19506'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19504'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19466'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19471'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.1936'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19313'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.19473'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '0.0031'
+    scoring_system: epss
+    scoring_elements: '0.37801'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00596'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00591'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+  - score: '4.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-52611
+weaknesses:
+  - CWE-118
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52611.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52611
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/00384f565a91c08c4bedae167f749b093d10e3fe
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/0e9ffff72a0674cd6656314dbd99cdd2123a3030
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5b5ddf21b978ec315cab9d9e7e6ac7374791a8c7
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2270077
+    reference_type:
+    reference_id: 2270077
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52611
+    reference_type:
+    reference_id: CVE-2023-52611
+  - url: https://usn.ubuntu.com/6765-1/
+    reference_type:
+    reference_id: USN-6765-1
+  - url: https://usn.ubuntu.com/6818-1/
+    reference_type:
+    reference_id: USN-6818-1
+  - url: https://usn.ubuntu.com/6818-2/
+    reference_type:
+    reference_id: USN-6818-2
+  - url: https://usn.ubuntu.com/6818-3/
+    reference_type:
+    reference_id: USN-6818-3
+  - url: https://usn.ubuntu.com/6818-4/
+    reference_type:
+    reference_id: USN-6818-4
+  - url: https://usn.ubuntu.com/6819-1/
+    reference_type:
+    reference_id: USN-6819-1
+  - url: https://usn.ubuntu.com/6819-2/
+    reference_type:
+    reference_id: USN-6819-2
+  - url: https://usn.ubuntu.com/6819-3/
+    reference_type:
+    reference_id: USN-6819-3
+  - url: https://usn.ubuntu.com/6819-4/
+    reference_type:
+    reference_id: USN-6819-4

@@ -1,0 +1,344 @@
+vulnerability_id: VCID-m9rf-a4uy-mybn
+aliases:
+  - CVE-2024-53079
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nmm/thp: fix\
+  \ deferred split unqueue naming and locking\n\nRecent changes are putting more pressure on\
+  \ THP deferred split queues:\nunder load revealing long-standing races, causing list_del corruptions,\n\
+  \"Bad page state\"s and worse (I keep BUGs in both of those, so usually\ndon't get to see\
+  \ how badly they end up without).  The relevant recent\nchanges being 6.8's mTHP, 6.10's mTHP\
+  \ swapout, and 6.12's mTHP swapin,\nimproved swap allocation, and underused THP splitting.\n\
+  \nBefore fixing locking: rename misleading folio_undo_large_rmappable(),\nwhich does not undo\
+  \ large_rmappable, to folio_unqueue_deferred_split(),\nwhich is what it does.  But that and\
+  \ its out-of-line __callee are mm\ninternals of very limited usability: add comment and WARN_ON_ONCEs\
+  \ to\ncheck usage; and return a bool to say if a deferred split was unqueued,\nwhich can then\
+  \ be used in WARN_ON_ONCEs around safety checks (sparing\ncallers the arcane conditionals\
+  \ in __folio_unqueue_deferred_split()).\n\nJust omit the folio_unqueue_deferred_split() from\
+  \ free_unref_folios(), all\nof whose callers now call it beforehand (and if any forget then\
+  \ bad_page()\nwill tell) - except for its caller put_pages_list(), which itself no\nlonger\
+  \ has any callers (and will be deleted separately).\n\nSwapout: mem_cgroup_swapout() has been\
+  \ resetting folio->memcg_data 0\nwithout checking and unqueueing a THP folio from deferred\
+  \ split list;\nwhich is unfortunate, since the split_queue_lock depends on the memcg\n(when\
+  \ memcg is enabled); so swapout has been unqueueing such THPs later,\nwhen freeing the folio,\
+  \ using the pgdat's lock instead: potentially\ncorrupting the memcg's list.  __remove_mapping()\
+  \ has frozen refcount to 0\nhere, so no problem with calling folio_unqueue_deferred_split()\
+  \ before\nresetting memcg_data.\n\nThat goes back to 5.4 commit 87eaceb3faa5 (\"mm: thp: make\
+  \ deferred split\nshrinker memcg aware\"): which included a check on swapcache before adding\n\
+  to deferred queue, but no check on deferred queue before adding THP to\nswapcache.  That worked\
+  \ fine with the usual sequence of events in reclaim\n(though there were a couple of rare ways\
+  \ in which a THP on deferred queue\ncould have been swapped out), but 6.12 commit dafff3f4c850\
+  \ (\"mm: split\nunderused THPs\") avoids splitting underused THPs in reclaim, which makes\n\
+  swapcache THPs on deferred queue commonplace.\n\nKeep the check on swapcache before adding\
+  \ to deferred queue?  Yes: it is\nno longer essential, but preserves the existing behaviour,\
+  \ and is likely\nto be a worthwhile optimization (vmstat showed much more traffic on the\n\
+  queue under swapping load if the check was removed); update its comment.\n\nMemcg-v1 move\
+  \ (deprecated): mem_cgroup_move_account() has been changing\nfolio->memcg_data without checking\
+  \ and unqueueing a THP folio from the\ndeferred list, sometimes corrupting \"from\" memcg's\
+  \ list, like swapout. \nRefcount is non-zero here, so folio_unqueue_deferred_split() can only\
+  \ be\nused in a WARN_ON_ONCE to validate the fix, which must be done earlier:\nmem_cgroup_move_charge_pte_range()\
+  \ first try to split the THP (splitting\nof course unqueues), or skip it if that fails.  Not\
+  \ ideal, but moving\ncharge has been requested, and khugepaged should repair the THP later:\n\
+  nobody wants new custom unqueueing code just for this deprecated case.\n\nThe 87eaceb3faa5\
+  \ commit did have the code to move from one deferred list\nto another (but was not conscious\
+  \ of its unsafety while refcount non-0);\nbut that was removed by 5.6 commit fac0516b5534\
+  \ (\"mm: thp: don't need care\ndeferred split queue in memcg charge move path\"), which argued\
+  \ that the\nexistence of a PMD mapping guarantees that the THP cannot be on a deferred\nlist.\
+  \  As above, false in rare cases, and now commonly false.\n\nBackport to 6.11 should be straightforward.\
+  \  Earlier backports must take\ncare that other _deferred_list fixes and dependencies are\
+  \ included.  There\nis not a strong case for backports, but they can fix cornercases."
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-53079.json
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01162'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01461'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01472'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01456'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01454'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01465'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01471'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01482'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01475'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01443'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03525'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03504'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.02523'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03499'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03478'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03468'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03466'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03474'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03476'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03492'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.03535'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0354'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0353'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0352'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04427'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04458'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+  - score: '3.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53079
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53079
+weaknesses:
+  - CWE-667
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-53079.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-53079
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-53079
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/afb1352d06b1b6b2cfd1f901c766a430c87078b3
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f8f931bba0f92052cf842b7e30917b1afcc77d5a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/fc4951c3e3358dd82ea508e893695b916c813f17
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2327337
+    reference_type:
+    reference_id: 2327337
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-53079
+    reference_type:
+    reference_id: CVE-2024-53079
+  - url: https://usn.ubuntu.com/7276-1/
+    reference_type:
+    reference_id: USN-7276-1
+  - url: https://usn.ubuntu.com/7277-1/
+    reference_type:
+    reference_id: USN-7277-1
+  - url: https://usn.ubuntu.com/7310-1/
+    reference_type:
+    reference_id: USN-7310-1
+  - url: https://usn.ubuntu.com/7449-1/
+    reference_type:
+    reference_id: USN-7449-1
+  - url: https://usn.ubuntu.com/7449-2/
+    reference_type:
+    reference_id: USN-7449-2
+  - url: https://usn.ubuntu.com/7450-1/
+    reference_type:
+    reference_id: USN-7450-1
+  - url: https://usn.ubuntu.com/7451-1/
+    reference_type:
+    reference_id: USN-7451-1
+  - url: https://usn.ubuntu.com/7452-1/
+    reference_type:
+    reference_id: USN-7452-1
+  - url: https://usn.ubuntu.com/7453-1/
+    reference_type:
+    reference_id: USN-7453-1
+  - url: https://usn.ubuntu.com/7468-1/
+    reference_type:
+    reference_id: USN-7468-1

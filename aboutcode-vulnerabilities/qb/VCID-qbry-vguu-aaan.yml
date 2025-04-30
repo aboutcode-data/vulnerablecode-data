@@ -1,0 +1,325 @@
+vulnerability_id: VCID-qbry-vguu-aaan
+aliases:
+  - CVE-2024-27080
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nbtrfs: fix\
+  \ race when detecting delalloc ranges during fiemap\n\nFor fiemap we recently stopped locking\
+  \ the target extent range for the\nwhole duration of the fiemap call, in order to avoid a\
+  \ deadlock in a\nscenario where the fiemap buffer happens to be a memory mapped range of\n\
+  the same file. This use case is very unlikely to be useful in practice but\nit may be triggered\
+  \ by fuzz testing (syzbot, etc).\n\nThis however introduced a race that makes us miss delalloc\
+  \ ranges for\nfile regions that are currently holes, so the caller of fiemap will not\nbe\
+  \ aware that there's data for some file regions. This can be quite\nserious for some use cases\
+  \ - for example in coreutils versions before 9.0,\nthe cp program used fiemap to detect holes\
+  \ and data in the source file,\ncopying only regions with data (extents or delalloc) from\
+  \ the source file\nto the destination file in order to preserve holes (see the documentation\n\
+  for its --sparse command line option). This means that if cp was used\nwith a source file\
+  \ that had delalloc in a hole, the destination file could\nend up without that data, which\
+  \ is effectively a data loss issue, if it\nhappened to hit the race described below.\n\nThe\
+  \ race happens like this:\n\n1) Fiemap is called, without the FIEMAP_FLAG_SYNC flag, for a\
+  \ file that\n   has delalloc in the file range [64M, 65M[, which is currently a hole;\n\n\
+  2) Fiemap locks the inode in shared mode, then starts iterating the\n   inode's subvolume\
+  \ tree searching for file extent items, without having\n   the whole fiemap target range locked\
+  \ in the inode's io tree - the\n   change introduced recently by commit b0ad381fa769 (\"btrfs:\
+  \ fix\n   deadlock with fiemap and extent locking\"). It only locks ranges in\n   the io tree\
+  \ when it finds a hole or prealloc extent since that\n   commit;\n\n3) Note that fiemap clones\
+  \ each leaf before using it, and this is to\n   avoid deadlocks when locking a file range\
+  \ in the inode's io tree and\n   the fiemap buffer is memory mapped to some file, because\
+  \ writing\n   to the page with btrfs_page_mkwrite() will wait on any ordered extent\n   for\
+  \ the page's range and the ordered extent needs to lock the range\n   and may need to modify\
+  \ the same leaf, therefore leading to a deadlock\n   on the leaf;\n\n4) While iterating the\
+  \ file extent items in the cloned leaf before\n   finding the hole in the range [64M, 65M[,\
+  \ the delalloc in that range\n   is flushed and its ordered extent completes - meaning the\
+  \ corresponding\n   file extent item is in the inode's subvolume tree, but not present in\n\
+  \   the cloned leaf that fiemap is iterating over;\n\n5) When fiemap finds the hole in the\
+  \ [64M, 65M[ range by seeing the gap in\n   the cloned leaf (or a file extent item with disk_bytenr\
+  \ == 0 in case\n   the NO_HOLES feature is not enabled), it will lock that file range in\n\
+  \   the inode's io tree and then search for delalloc by checking for the\n   EXTENT_DELALLOC\
+  \ bit in the io tree for that range and ordered extents\n   (with btrfs_find_delalloc_in_range()).\
+  \ But it finds nothing since the\n   delalloc in that range was already flushed and the ordered\
+  \ extent\n   completed and is gone - as a result fiemap will not report that there's\n   delalloc\
+  \ or an extent for the range [64M, 65M[, so user space will be\n   mislead into thinking that\
+  \ there's a hole in that range.\n\nThis could actually be sporadically triggered with test\
+  \ case generic/094\nfrom fstests, which reports a missing extent/delalloc range like this:\n\
+  \n  generic/094 2s ... - output mismatch (see /home/fdmanana/git/hub/xfstests/results//generic/094.out.bad)\n\
+  \      --- tests/generic/094.out\t2020-06-10 19:29:03.830519425 +0100\n      +++ /home/fdmanana/git/hub/xfstests/results//generic/094.out.bad\t\
+  2024-02-28 11:00:00.381071525 +0000\n      @@ -1,3 +1,9 @@\n       QA output created by 094\n\
+  \       fiemap run with sync\n       fiemap run without sync\n      +ERROR: couldn't find\
+  \ extent at 7\n      +map is 'HHDDHPPDPHPH'\n      +logical: [       5..       6] phys:\n\
+  ---truncated---"
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-27080.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33727'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33626'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33582'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.3372'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33736'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33732'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33752'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33715'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33682'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33692'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33755'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33753'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33723'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33708'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.0016'
+    scoring_system: epss
+    scoring_elements: '0.33686'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40111'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.4004'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40095'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40072'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40029'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.401'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40162'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40199'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40201'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40097'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40093'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40104'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.40101'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '0.00677'
+    scoring_system: epss
+    scoring_elements: '0.55579'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-27080.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-27080
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/49d640d2946c35a17b051d54171a032dd95b0f50
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/978b63f7464abcfd364a6c95f734282c50f3decf
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ced63fffd63072c0ca55d5a451010d71bf08c0b3
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2278490
+    reference_type:
+    reference_id: 2278490
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-27080
+    reference_type:
+    reference_id: CVE-2024-27080
+  - url: https://usn.ubuntu.com/6816-1/
+    reference_type:
+    reference_id: USN-6816-1
+  - url: https://usn.ubuntu.com/6817-1/
+    reference_type:
+    reference_id: USN-6817-1
+  - url: https://usn.ubuntu.com/6817-2/
+    reference_type:
+    reference_id: USN-6817-2
+  - url: https://usn.ubuntu.com/6817-3/
+    reference_type:
+    reference_id: USN-6817-3
+  - url: https://usn.ubuntu.com/6878-1/
+    reference_type:
+    reference_id: USN-6878-1

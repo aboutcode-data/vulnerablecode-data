@@ -1,0 +1,307 @@
+vulnerability_id: VCID-7eaw-hr1u-aaaa
+aliases:
+  - CVE-2024-35818
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  LoongArch: Define the __io_aw() hook as mmiowb()
+
+  Commit fb24ea52f78e0d595852e ("drivers: Remove explicit invocations of
+  mmiowb()") remove all mmiowb() in drivers, but it says:
+
+  "NOTE: mmiowb() has only ever guaranteed ordering in conjunction with
+  spin_unlock(). However, pairing each mmiowb() removal in this patch with
+  the corresponding call to spin_unlock() is not at all trivial, so there
+  is a small chance that this change may regress any drivers incorrectly
+  relying on mmiowb() to order MMIO writes between CPUs using lock-free
+  synchronisation."
+
+  The mmio in radeon_ring_commit() is protected by a mutex rather than a
+  spinlock, but in the mutex fastpath it behaves similar to spinlock. We
+  can add mmiowb() calls in the radeon driver but the maintainer says he
+  doesn't like such a workaround, and radeon is not the only example of
+  mutex protected mmio.
+
+  So we should extend the mmiowb tracking system from spinlock to mutex,
+  and maybe other locking primitives. This is not easy and error prone, so
+  we solve it in the architectural code, by simply defining the __io_aw()
+  hook as mmiowb(). And we no longer need to override queued_spin_unlock()
+  so use the generic definition.
+
+  Without this, we get such an error when run 'glxgears' on weak ordering
+  architectures such as LoongArch:
+
+  radeon 0000:04:00.0: ring 0 stalled for more than 10324msec
+  radeon 0000:04:00.0: ring 3 stalled for more than 10240msec
+  radeon 0000:04:00.0: GPU lockup (current fence id 0x000000000001f412 last fence id 0x000000000001f414 on ring 3)
+  radeon 0000:04:00.0: GPU lockup (current fence id 0x000000000000f940 last fence id 0x000000000000f941 on ring 0)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+  radeon 0000:04:00.0: scheduling IB failed (-35).
+  [drm:radeon_gem_va_ioctl [radeon]] *ERROR* Couldn't update BO_VA (-35)
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35818.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.2944'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29407'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.2947'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29537'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29584'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29521'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29501'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29465'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29464'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29471'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29489'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31123'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31188'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31192'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31165'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31149'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31121'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31161'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31039'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31001'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31146'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31162'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31152'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31182'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31142'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '0.00599'
+    scoring_system: epss
+    scoring_elements: '0.52924'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35818.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-35818
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-35818
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/0b61a7dc6712b78799b3949997e8a5e94db5c4b0
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/97cd43ba824aec764f5ea2790d0c0a318f885167
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9adec248bba33b1503252caf8e59d81febfc5ceb
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9c68ece8b2a5c5ff9b2fcaea923dd73efeb174cd
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d7d7c6cdea875be3b241d7d39873bb431db7154d
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2281200
+    reference_type:
+    reference_id: 2281200
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-35818
+    reference_type:
+    reference_id: CVE-2024-35818

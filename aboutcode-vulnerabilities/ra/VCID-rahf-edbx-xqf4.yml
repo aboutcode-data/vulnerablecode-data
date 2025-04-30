@@ -1,0 +1,181 @@
+vulnerability_id: VCID-rahf-edbx-xqf4
+aliases:
+  - CVE-2025-37785
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  ext4: fix OOB read when checking dotdot dir
+
+  Mounting a corrupted filesystem with directory which contains '.' dir
+  entry with rec_len == block size results in out-of-bounds read (later
+  on, when the corrupted directory is removed).
+
+  ext4_empty_dir() assumes every ext4 directory contains at least '.'
+  and '..' as directory entries in the first data block. It first loads
+  the '.' dir entry, performs sanity checks by calling ext4_check_dir_entry()
+  and then uses its rec_len member to compute the location of '..' dir
+  entry (in ext4_next_entry). It assumes the '..' dir entry fits into the
+  same data block.
+
+  If the rec_len of '.' is precisely one block (4KB), it slips through the
+  sanity checks (it is considered the last directory entry in the data
+  block) and leaves "struct ext4_dir_entry_2 *de" point exactly past the
+  memory slot allocated to the data block. The following call to
+  ext4_check_dir_entry() on new value of de then dereferences this pointer
+  which results in out-of-bounds mem access.
+
+  Fix this by extending __ext4_check_dir_entry() to check for '.' dir
+  entries that reach the end of data block. Make sure to ignore the phony
+  dir entries for checksum (by checking name_len for non-zero).
+
+  Note: This is reported by KASAN as use-after-free in case another
+  structure was recently freed from the slot past the bound, but it is
+  really an OOB read.
+
+  This issue was found by syzkaller tool.
+
+  Call Trace:
+  [   38.594108] BUG: KASAN: slab-use-after-free in __ext4_check_dir_entry+0x67e/0x710
+  [   38.594649] Read of size 2 at addr ffff88802b41a004 by task syz-executor/5375
+  [   38.595158]
+  [   38.595288] CPU: 0 UID: 0 PID: 5375 Comm: syz-executor Not tainted 6.14.0-rc7 #1
+  [   38.595298] Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS rel-1.16.3-0-ga6ed6b701f0a-prebuilt.qemu.org 04/01/2014
+  [   38.595304] Call Trace:
+  [   38.595308]  <TASK>
+  [   38.595311]  dump_stack_lvl+0xa7/0xd0
+  [   38.595325]  print_address_description.constprop.0+0x2c/0x3f0
+  [   38.595339]  ? __ext4_check_dir_entry+0x67e/0x710
+  [   38.595349]  print_report+0xaa/0x250
+  [   38.595359]  ? __ext4_check_dir_entry+0x67e/0x710
+  [   38.595368]  ? kasan_addr_to_slab+0x9/0x90
+  [   38.595378]  kasan_report+0xab/0xe0
+  [   38.595389]  ? __ext4_check_dir_entry+0x67e/0x710
+  [   38.595400]  __ext4_check_dir_entry+0x67e/0x710
+  [   38.595410]  ext4_empty_dir+0x465/0x990
+  [   38.595421]  ? __pfx_ext4_empty_dir+0x10/0x10
+  [   38.595432]  ext4_rmdir.part.0+0x29a/0xd10
+  [   38.595441]  ? __dquot_initialize+0x2a7/0xbf0
+  [   38.595455]  ? __pfx_ext4_rmdir.part.0+0x10/0x10
+  [   38.595464]  ? __pfx___dquot_initialize+0x10/0x10
+  [   38.595478]  ? down_write+0xdb/0x140
+  [   38.595487]  ? __pfx_down_write+0x10/0x10
+  [   38.595497]  ext4_rmdir+0xee/0x140
+  [   38.595506]  vfs_rmdir+0x209/0x670
+  [   38.595517]  ? lookup_one_qstr_excl+0x3b/0x190
+  [   38.595529]  do_rmdir+0x363/0x3c0
+  [   38.595537]  ? __pfx_do_rmdir+0x10/0x10
+  [   38.595544]  ? strncpy_from_user+0x1ff/0x2e0
+  [   38.595561]  __x64_sys_unlinkat+0xf0/0x130
+  [   38.595570]  do_syscall_64+0x5b/0x180
+  [   38.595583]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-37785.json
+  - score: '7.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-37785.json
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04985'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05028'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04989'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05038'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05064'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07616'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07679'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07674'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07685'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.0768'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-125
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-37785.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-37785
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-37785
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/52a5509ab19a5d3afe301165d9b5787bba34d842
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/53bc45da8d8da92ec07877f5922b130562eb4b00
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/89503e5eae64637d0fa2218912b54660effe7d93
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ac28c5684c1cdab650a7e5065b19e91577d37a4b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b47584c556444cf7acb66b26a62cbc348eb92b78
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b7531a4f99c3887439d778afaf418d1a01a5f01b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d5e206778e96e8667d3bde695ad372c296dc9353
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e47f472a664d70a3d104a6c2a035cdff55a719b4
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360921
+    reference_type:
+    reference_id: 2360921
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-37785
+    reference_type:
+    reference_id: CVE-2025-37785

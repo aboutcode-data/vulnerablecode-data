@@ -1,0 +1,406 @@
+vulnerability_id: VCID-zyec-a4jb-aaaq
+aliases:
+  - CVE-2024-26991
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  KVM: x86/mmu: x86: Don't overflow lpage_info when checking attributes
+
+  Fix KVM_SET_MEMORY_ATTRIBUTES to not overflow lpage_info array and trigger
+  KASAN splat, as seen in the private_mem_conversions_test selftest.
+
+  When memory attributes are set on a GFN range, that range will have
+  specific properties applied to the TDP. A huge page cannot be used when
+  the attributes are inconsistent, so they are disabled for those the
+  specific huge pages. For internal KVM reasons, huge pages are also not
+  allowed to span adjacent memslots regardless of whether the backing memory
+  could be mapped as huge.
+
+  What GFNs support which huge page sizes is tracked by an array of arrays
+  'lpage_info' on the memslot, of ‘kvm_lpage_info’ structs. Each index of
+  lpage_info contains a vmalloc allocated array of these for a specific
+  supported page size. The kvm_lpage_info denotes whether a specific huge
+  page (GFN and page size) on the memslot is supported. These arrays include
+  indices for unaligned head and tail huge pages.
+
+  Preventing huge pages from spanning adjacent memslot is covered by
+  incrementing the count in head and tail kvm_lpage_info when the memslot is
+  allocated, but disallowing huge pages for memory that has mixed attributes
+  has to be done in a more complicated way. During the
+  KVM_SET_MEMORY_ATTRIBUTES ioctl KVM updates lpage_info for each memslot in
+  the range that has mismatched attributes. KVM does this a memslot at a
+  time, and marks a special bit, KVM_LPAGE_MIXED_FLAG, in the kvm_lpage_info
+  for any huge page. This bit is essentially a permanently elevated count.
+  So huge pages will not be mapped for the GFN at that page size if the
+  count is elevated in either case: a huge head or tail page unaligned to
+  the memslot or if KVM_LPAGE_MIXED_FLAG is set because it has mixed
+  attributes.
+
+  To determine whether a huge page has consistent attributes, the
+  KVM_SET_MEMORY_ATTRIBUTES operation checks an xarray to make sure it
+  consistently has the incoming attribute. Since level - 1 huge pages are
+  aligned to level huge pages, it employs an optimization. As long as the
+  level - 1 huge pages are checked first, it can just check these and assume
+  that if each level - 1 huge page contained within the level sized huge
+  page is not mixed, then the level size huge page is not mixed. This
+  optimization happens in the helper hugepage_has_attrs().
+
+  Unfortunately, although the kvm_lpage_info array representing page size
+  'level' will contain an entry for an unaligned tail page of size level,
+  the array for level - 1  will not contain an entry for each GFN at page
+  size level. The level - 1 array will only contain an index for any
+  unaligned region covered by level - 1 huge page size, which can be a
+  smaller region. So this causes the optimization to overflow the level - 1
+  kvm_lpage_info and perform a vmalloc out of bounds read.
+
+  In some cases of head and tail pages where an overflow could happen,
+  callers skip the operation completely as KVM_LPAGE_MIXED_FLAG is not
+  required to prevent huge pages as discussed earlier. But for memslots that
+  are smaller than the 1GB page size, it does call hugepage_has_attrs(). In
+  this case the huge page is both the head and tail page. The issue can be
+  observed simply by compiling the kernel with CONFIG_KASAN_VMALLOC and
+  running the selftest “private_mem_conversions_test”, which produces the
+  output like the following:
+
+  BUG: KASAN: vmalloc-out-of-bounds in hugepage_has_attrs+0x7e/0x110
+  Read of size 4 at addr ffffc900000a3008 by task private_mem_con/169
+  Call Trace:
+    dump_stack_lvl
+    print_report
+    ? __virt_addr_valid
+    ? hugepage_has_attrs
+    ? hugepage_has_attrs
+    kasan_report
+    ? hugepage_has_attrs
+    hugepage_has_attrs
+    kvm_arch_post_set_memory_attributes
+    kvm_vm_ioctl
+
+  It is a little ambiguous whether the unaligned head page (in the bug case
+  also the tail page) should be expected to have KVM_LPAGE_MIXED_FLAG set.
+  It is not functionally required, as the unal
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26991.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14215'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14067'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14128'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14222'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14306'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14307'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14275'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14242'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14233'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14213'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14221'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14241'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14246'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14234'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17233'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17249'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17279'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17275'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17252'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17228'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17198'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17224'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17244'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17277'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17296'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.1727'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17254'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17125'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17072'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '0.00131'
+    scoring_system: epss
+    scoring_elements: '0.20665'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/048cc4a028e635d339687ed968985d2d1669494c
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-06-06T18:48:18Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/048cc4a028e635d339687ed968985d2d1669494c
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/992b54bd083c5bee24ff7cc35991388ab08598c4
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-06-06T18:48:18Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/992b54bd083c5bee24ff7cc35991388ab08598c4
+weaknesses:
+  - CWE-125
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26991.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-26991
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/048cc4a028e635d339687ed968985d2d1669494c
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/992b54bd083c5bee24ff7cc35991388ab08598c4
+    reference_type:
+    reference_id:
+  - url: https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/4EZ6PJW7VOZ224TD7N4JZNU6KV32ZJ53/
+    reference_type:
+    reference_id:
+  - url: https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/DAMSOZXJEPUOXW33WZYWCVAY7Z5S7OOY/
+    reference_type:
+    reference_id:
+  - url: https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/GCBZZEC7L7KTWWAS2NLJK6SO3IZIL4WW/
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2278318
+    reference_type:
+    reference_id: 2278318
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.9:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.9:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.9:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.9:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.9:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.9:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.9:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.9:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-26991
+    reference_type:
+    reference_id: CVE-2024-26991
+  - url: https://access.redhat.com/errata/RHSA-2024:6997
+    reference_type:
+    reference_id: RHSA-2024:6997
+  - url: https://usn.ubuntu.com/6893-1/
+    reference_type:
+    reference_id: USN-6893-1
+  - url: https://usn.ubuntu.com/6893-2/
+    reference_type:
+    reference_id: USN-6893-2
+  - url: https://usn.ubuntu.com/6893-3/
+    reference_type:
+    reference_id: USN-6893-3
+  - url: https://usn.ubuntu.com/6918-1/
+    reference_type:
+    reference_id: USN-6918-1

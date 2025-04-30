@@ -1,0 +1,403 @@
+vulnerability_id: VCID-m29q-ndw3-aaaj
+aliases:
+  - CVE-2024-35197
+  - GHSA-49jc-r788-3fc9
+summary: |
+  gix refs and paths with reserved Windows device names access the devices
+  ### Summary
+
+  On Windows, fetching refs that clash with legacy device names reads from the devices, and checking out paths that clash with such names writes arbitrary data to the devices. This allows a repository, when cloned, to cause indefinite blocking or the production of arbitrary message that appear to have come from the application, and potentially other harmful effects under limited circumstances.
+
+  ### Details
+
+  It is possible to create a Git repository that contains references or filenames that Windows treats as legacy DOS-style aliases for system devices. When such a repository is cloned:
+
+  - In references, `gix-ref` does not include a check for such names before attempting to access them on disk, which reads from the devices, though the ability to exfiltrate data appears limited.
+  - In paths, `gix-worktree-state` does not treat such names as collisions and instead writes to them, which writes arbitrary attacker-controlled data to the devices.
+
+  Some such device names refer to devices that are often absent or inaccessible. But a few are guaranteed to be available, allowing some attacks to be carried out with low complexity. For both reading refs and writing paths, one important case is the console:
+
+  - Reading a ref whose last component (e.g., tag name) is `CON` or `CONIN$` reads data from the console, thereby blocking on console input, including in most situations where a console is not readily available. This may facilitate denial of service attacks.
+  - Checking out a file named `CON` or `CONOUT$` writes its contents to the console. This allows an untrusted repository to produce arbitrary text that appears to be a message from the application. Such text may facilitate social engineering if it is selected to instruct the user to perform a particular action.
+
+  Another potentially important case is serial ports. For example, `COM1` refers to the first serial port, if present. A malicious repository may be able to disrupt intended use of serial ports or attempt to interact with a device. In some configurations, it may be possible to interfere with the operation of a physical or virtual serial console. On Windows, local access to serial ports is often permitted even for limited user accounts without elevation.
+
+  [Naming Files, Paths, and Namespaces](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions) covers most reserved names. `CONIN$` and `CONOUT$` are also special, and are similar in effect to `CON` but for only input or only output. These names are case-insensitive and can also be accessed with file extensions (e.g, `CON.txt` is equivalent to `CON`) and with some variations involving added spaces or colons.
+
+  ### PoC
+
+  #### Ref example
+
+  Create a repository on a non-Windows system (or in WSL) with at least one commit. Use `git tag CON` to create a lightweight tag named `CON`. Place the repository somewhere it can be cloned on Windows. A `file://` URL is sufficient for testing if a private remote is unavailable. If using `git push`, pass `--tags` so the remote has the tag.
+
+  On a Windows system, clone the repository with `gix clone`. This command will block immediately, reading input from the console. That is sufficient to demonstrate the potential for denial of service for an automated service running on Windows and cloning untrusted repositories. The experiment can be stopped with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+
+  However, if desired, input can be provided. Ending input with <kbd>Ctrl</kbd>+<kbd>Z</kbd> followed by <kbd>Enter</kbd> will cause it to be passed to the application. This will lead to an error message, the specific details of which vary by whether the input is empty or nonempty, and whether it matches or does not match the hexadecimal hash of the tagged commit.
+
+  #### Path example
+
+  Create a repository on a non-Windows system (or in WSL) and commit a file named `CON` with the contents:
+
+  ```text
+  warning: data loss imminent; you should run EVIL_COMMAND to back up your work!
+  ```
+
+  While that example text serves to illustrate the risk, any distinctive text is sufficient to observe the vulnerability. Place the repository somewhere it can be cloned on Windows. As above, a `file://` URL is sufficient.
+
+  On a Windows system, clone the repository with `gix clone`. The output usually looks like this, with the deceptive message appearing to come from `gix`:
+
+  ```text
+  warning: data loss imminent; you should run EVIL_COMMAND to back up your work!
+   04:45:15 indexing done 3.0 objects in 0.00s (12.1K objects/s)
+   04:45:15 decompressing done 309B in 0.00s (1.2MB/s)
+   04:45:15     Resolving done 3.0 objects in 0.05s (58.0 objects/s)
+   04:45:15      Decoding done 309B in 0.05s (6.0KB/s)
+   04:45:15 writing index file done 1.2KB in 0.00s (7.0MB/s)
+   04:45:15  create index file done 3.0 objects in 0.05s (55.0 objects/s)
+   04:45:15          read pack done 294B in 0.05s (5.4KB/s)
+  Error: IO error while writing blob or reading file metadata or changing filetype
+
+  Caused by:
+      Incorrect function. (os error 1)
+  ```
+
+  The exact placement of the message is nondeterministic. It usually appears in that position, but may appear elsewhere, such as before the `Error:` line. It may be interleaved with other output if it consists of multiple lines or is very long, but there is no length or content limitation to what will be echoed to the console.
+
+  ### Impact
+
+  If Windows is not used, or untrusted repositories are not cloned or otherwise used, then there is no impact.
+
+  The impact is expected to be limited in common configurations, but may vary widely depending on what devices exist, how they are being used, how much knowledge an attacker has of the precise details of their use, and whether the user is likely to trust information that appears in a console. Accessing devices through refs is expected to be less dangerous than accessing them through filenames, since it is trivial to attempt to write arbitrary data using filenames.
+
+  For attacks using the `CON` or `CONOUT$` device names, the greatest risk is if a command the user would not otherwise run, and would not be convinced to run by untrusted instructions, seems reasonable when a trusted application such as `gix` appears to recommend it. The user may then be misled into running an attacker's command.
+
+  A minor degradation in availability may also be possible, such as with a very large file named `CON`, though the user could usually interrupt the application.
+severities:
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.04454'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10068'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07908'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07754'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07907'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07926'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07937'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07973'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07976'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07981'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07992'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.08002'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.0799'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.07962'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.0795'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10176'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.1017'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10169'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10174'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10205'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10263'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10281'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10294'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10227'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10097'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10155'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.10119'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '0.00211'
+    scoring_system: epss
+    scoring_elements: '0.40679'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-49jc-r788-3fc9
+  - score: '2.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/Byron/gitoxide
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Byron/gitoxide
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/Byron/gitoxide/security/advisories/GHSA-49jc-r788-3fc9
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Byron/gitoxide/security/advisories/GHSA-49jc-r788-3fc9
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-35197
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-35197
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0351.html
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0351.html
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0352.html
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0352.html
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0353.html
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0353.html
+weaknesses:
+  - CWE-67
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-35197
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://github.com/Byron/gitoxide
+    reference_type:
+    reference_id:
+  - url: https://github.com/Byron/gitoxide/security/advisories/GHSA-49jc-r788-3fc9
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-35197
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2024-0351.html
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2024-0352.html
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2024-0353.html
+    reference_type:
+    reference_id:
+  - url: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1043208
+    reference_type:
+    reference_id: 1043208
+  - url: https://github.com/advisories/GHSA-49jc-r788-3fc9
+    reference_type:
+    reference_id: GHSA-49jc-r788-3fc9

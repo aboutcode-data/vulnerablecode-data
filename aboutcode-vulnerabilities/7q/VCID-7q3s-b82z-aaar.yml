@@ -1,0 +1,322 @@
+vulnerability_id: VCID-7q3s-b82z-aaar
+aliases:
+  - CVE-2021-47191
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  scsi: scsi_debug: Fix out-of-bound read in resp_readcap16()
+
+  The following warning was observed running syzkaller:
+
+  [ 3813.830724] sg_write: data in/out 65466/242 bytes for SCSI command 0x9e-- guessing data in;
+  [ 3813.830724]    program syz-executor not setting count and/or reply_len properly
+  [ 3813.836956] ==================================================================
+  [ 3813.839465] BUG: KASAN: stack-out-of-bounds in sg_copy_buffer+0x157/0x1e0
+  [ 3813.841773] Read of size 4096 at addr ffff8883cf80f540 by task syz-executor/1549
+  [ 3813.846612] Call Trace:
+  [ 3813.846995]  dump_stack+0x108/0x15f
+  [ 3813.847524]  print_address_description+0xa5/0x372
+  [ 3813.848243]  kasan_report.cold+0x236/0x2a8
+  [ 3813.849439]  check_memory_region+0x240/0x270
+  [ 3813.850094]  memcpy+0x30/0x80
+  [ 3813.850553]  sg_copy_buffer+0x157/0x1e0
+  [ 3813.853032]  sg_copy_from_buffer+0x13/0x20
+  [ 3813.853660]  fill_from_dev_buffer+0x135/0x370
+  [ 3813.854329]  resp_readcap16+0x1ac/0x280
+  [ 3813.856917]  schedule_resp+0x41f/0x1630
+  [ 3813.858203]  scsi_debug_queuecommand+0xb32/0x17e0
+  [ 3813.862699]  scsi_dispatch_cmd+0x330/0x950
+  [ 3813.863329]  scsi_request_fn+0xd8e/0x1710
+  [ 3813.863946]  __blk_run_queue+0x10b/0x230
+  [ 3813.864544]  blk_execute_rq_nowait+0x1d8/0x400
+  [ 3813.865220]  sg_common_write.isra.0+0xe61/0x2420
+  [ 3813.871637]  sg_write+0x6c8/0xef0
+  [ 3813.878853]  __vfs_write+0xe4/0x800
+  [ 3813.883487]  vfs_write+0x17b/0x530
+  [ 3813.884008]  ksys_write+0x103/0x270
+  [ 3813.886268]  __x64_sys_write+0x77/0xc0
+  [ 3813.886841]  do_syscall_64+0x106/0x360
+  [ 3813.887415]  entry_SYSCALL_64_after_hwframe+0x44/0xa9
+
+  This issue can be reproduced with the following syzkaller log:
+
+  r0 = openat(0xffffffffffffff9c, &(0x7f0000000040)='./file0\x00', 0x26e1, 0x0)
+  r1 = syz_open_procfs(0xffffffffffffffff, &(0x7f0000000000)='fd/3\x00')
+  open_by_handle_at(r1, &(0x7f00000003c0)=ANY=[@ANYRESHEX], 0x602000)
+  r2 = syz_open_dev$sg(&(0x7f0000000000), 0x0, 0x40782)
+  write$binfmt_aout(r2, &(0x7f0000000340)=ANY=[@ANYBLOB="00000000deff000000000000000000000000000000000000000000000000000047f007af9e107a41ec395f1bded7be24277a1501ff6196a83366f4e6362bc0ff2b247f68a972989b094b2da4fb3607fcf611a22dd04310d28c75039d"], 0x126)
+
+  In resp_readcap16() we get "int alloc_len" value -1104926854, and then pass
+  the huge arr_len to fill_from_dev_buffer(), but arr is only 32 bytes. This
+  leads to OOB in sg_copy_buffer().
+
+  To solve this issue, define alloc_len as u32.
+severities:
+  - score: '6.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47191.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19785'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19778'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19784'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19786'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.1641'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16352'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16509'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16527'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16551'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16575'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16545'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16534'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16511'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16529'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16562'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16558'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16515'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.16474'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19572'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19646'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19698'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.1976'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19756'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19755'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19737'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19736'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19749'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '0.00246'
+    scoring_system: epss
+    scoring_elements: '0.32483'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-47191
+weaknesses:
+  - CWE-125
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47191.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47191
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-47191
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3e20cb072679bdb47747ccc8bee3233a4cf0765a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/4e3ace0051e7e504b55d239daab8789dd89b863c
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5b8bed6464ad6653586e30df046185fd816ad999
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2274618
+    reference_type:
+    reference_id: 2274618
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47191
+    reference_type:
+    reference_id: CVE-2021-47191

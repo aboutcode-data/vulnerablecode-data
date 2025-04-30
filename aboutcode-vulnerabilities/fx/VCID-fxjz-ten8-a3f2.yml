@@ -1,0 +1,280 @@
+vulnerability_id: VCID-fxjz-ten8-a3f2
+aliases:
+  - CVE-2025-23042
+  - GHSA-j2jg-fq62-7c3h
+summary: "Gradio Blocked Path ACL Bypass Vulnerability\n## Summary\n\nGradio's Access Control\
+  \ List (ACL) for file paths can be bypassed by altering the letter case of a blocked file\
+  \ or directory path. This vulnerability arises due to the lack of case normalization in the\
+  \ file path validation logic. On case-insensitive file systems, such as those used by Windows\
+  \ and macOS, this flaw enables attackers to circumvent security restrictions and access sensitive\
+  \ files that should be protected.\n\nThis issue can lead to unauthorized data access, exposing\
+  \ sensitive information and undermining the integrity of Gradio's security model. Given Gradio's\
+  \ popularity for building web applications, particularly in machine learning and AI, this\
+  \ vulnerability may pose a substantial threat if exploited in production environments.\n\n\
+  ## Affected Version\n\nGradio <= 5.6.0\n\n## Impact\n\n- **Unauthorized Access**: Sensitive\
+  \ files or directories specified in `blocked_paths` can be accessed by attackers.\n\n- **Data\
+  \ Exposure**: Critical files, such as configuration files or user data, may be leaked.\n\n\
+  - **Security Breach**: This can lead to broader application or system compromise if sensitive\
+  \ files contain credentials or API keys.\n\n## Root Cause\n\nThe [`blocked_paths`](https://github.com/gradio-app/gradio/blob/main/gradio/blocks.py#L2310)\
+  \ parameter in Gradio block's initial configuration is designed to restrict user access to\
+  \ specific files or directories in the local file system. However, it does not account for\
+  \ case-insensitive operating systems, such as Windows and macOS. This oversight enables attackers\
+  \ to bypass ACL restrictions by changing the case of file paths.\n\nVulnerable snippet: \n\
+  \n```python\n# https://github.com/gradio-app/gradio/blob/main/gradio/utils.py#L1500-L1517\n\
+  def is_allowed_file(\n    path: Path,\n    blocked_paths: Sequence[str | Path],\n    allowed_paths:\
+  \ Sequence[str | Path],\n    created_paths: Sequence[str | Path],\n) -> tuple[\n    bool,\
+  \ Literal[\"in_blocklist\", \"allowed\", \"created\", \"not_created_or_allowed\"]\n]:\n  \
+  \  in_blocklist = any(\n        is_in_or_equal(path, blocked_path) for blocked_path in blocked_paths\n\
+  \    )\n    if in_blocklist:\n        return False, \"in_blocklist\"\n    if any(is_in_or_equal(path,\
+  \ allowed_path) for allowed_path in allowed_paths):\n        return True, \"allowed\"\n  \
+  \  if any(is_in_or_equal(path, created_path) for created_path in created_paths):\n       \
+  \ return True, \"created\"\n    return False, \"not_created_or_allowed\"\n```\n\nGradio relies\
+  \ on `is_in_or_equal` to determine if a file path is restricted. However, this logic fails\
+  \ to handle case variations in paths on case-insensitive file systems, leading to the bypass.\n\
+  \n## Proof of Concept (PoC)\n\n### Steps to Reproduce\n\n- Deploy a Gradio demo app on a case-insensitive\
+  \ operating system (e.g., Windows or macOS).\n\n  ```bash\n  import gradio as gr\n  def update(name):\n\
+  \      return f\"Welcome to Gradio, {name}!\"\n  \n  with gr.Blocks() as demo:\n      gr.Markdown(\"\
+  Start typing below and then click **Run** to see the output.\")\n      with gr.Row():\n  \
+  \        inp = gr.Textbox(placeholder=\"What is your name?\")\n          out = gr.Textbox()\n\
+  \      btn = gr.Button(\"Run\")\n      btn.click(fn=update, inputs=inp, outputs=out)\n  \n\
+  \  demo.launch(blocked_paths=['resources/admin'], allowed_paths=['resources/'])\n  ```\n\n\
+  - Set up the file system:\n\n  - Create a folder named `resources` in the same directory as\
+  \ the app, containing a file `1.txt`.\n\n  - Inside the `resources` folder, create a subfolder\
+  \ named `admin` containing a sensitive file `credential.txt` (this file should be inaccessible\
+  \ due to `blocked_paths`).\n\n- Perform the attack:\n\n  - Access the sensitive file using\
+  \ a case-altered path:\n\n    ```\n    http://127.0.0.1:PORT/gradio_api/file=resources/adMin/credential.txt\n\
+  \    ```\n\n### Expected Result\n\nAccess to `resources/admin/credential.txt` should be blocked.\n\
+  \n### Actual Result\n\nBy altering the case in the path (e.g., `adMin`), the blocked ACL is\
+  \ bypassed, and unauthorized access to the sensitive file is granted.\n\n![image-20241119172439042](https://api.2h0ng.wiki:443/noteimages/2024/11/19/17-24-39-883969d4c31ce8a8d2a939654fab56d4.png)\n\
+  \nThis demonstration highlights that flipping the case of restricted paths allows attackers\
+  \ to bypass Gradio's ACL and access sensitive data.\n\n## Remediation Recommendations\n\n\
+  1. **Normalize Path Case**:\n\n   - Before evaluating paths against the ACL, normalize the\
+  \ case of both the requested path and the blocked paths (e.g., convert all paths to lowercase).\n\
+  \n   - Example:\n\n     ```python\n     normalized_path = str(path).lower()\n     normalized_blocked_paths\
+  \ = [str(p).lower() for p in blocked_paths]\n     ```\n\n2. **Update Documentation**:\n\n\
+  \   - Warn developers about potential risks when deploying Gradio on case-insensitive file\
+  \ systems.\n\n3. **Release Security Patches**:\n\n   - Notify users of the vulnerability and\
+  \ release an updated version of Gradio with the fixed logic.\n\n##"
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.07813'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18704'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18601'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18657'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18721'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18711'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18699'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18676'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18669'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18682'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18689'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18717'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18709'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15387'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15347'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15514'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15521'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15543'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15578'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15551'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15544'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15565'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15605'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15608'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15555'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15505'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1853'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-j2jg-fq62-7c3h
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gradio-app/gradio
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gradio-app/gradio/commit/6b63fdec441b5c9bf910f910a2505d8defbb6bf8
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gradio-app/gradio/releases/tag/gradio%405.11.0
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: '8.7'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: '8.7'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-01-15T14:18:00Z/
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-01-15T14:18:00Z/
+    published_at: None
+    url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-23042
+weaknesses:
+  - CWE-178
+  - CWE-937
+  - CWE-1035
+  - CWE-285
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-23042
+    reference_type:
+    reference_id:
+  - url: https://github.com/gradio-app/gradio
+    reference_type:
+    reference_id:
+  - url: https://github.com/gradio-app/gradio/commit/6b63fdec441b5c9bf910f910a2505d8defbb6bf8
+    reference_type:
+    reference_id:
+  - url: https://github.com/gradio-app/gradio/releases/tag/gradio%405.11.0
+    reference_type:
+    reference_id:
+  - url: https://github.com/gradio-app/gradio/security/advisories/GHSA-j2jg-fq62-7c3h
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-23042
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-j2jg-fq62-7c3h
+    reference_type:
+    reference_id: GHSA-j2jg-fq62-7c3h

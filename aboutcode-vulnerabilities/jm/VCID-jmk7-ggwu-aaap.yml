@@ -1,0 +1,357 @@
+vulnerability_id: VCID-jmk7-ggwu-aaap
+aliases:
+  - CVE-2024-35971
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  net: ks8851: Handle softirqs at the end of IRQ thread to fix hang
+
+  The ks8851_irq() thread may call ks8851_rx_pkts() in case there are
+  any packets in the MAC FIFO, which calls netif_rx(). This netif_rx()
+  implementation is guarded by local_bh_disable() and local_bh_enable().
+  The local_bh_enable() may call do_softirq() to run softirqs in case
+  any are pending. One of the softirqs is net_rx_action, which ultimately
+  reaches the driver .start_xmit callback. If that happens, the system
+  hangs. The entire call chain is below:
+
+  ks8851_start_xmit_par from netdev_start_xmit
+  netdev_start_xmit from dev_hard_start_xmit
+  dev_hard_start_xmit from sch_direct_xmit
+  sch_direct_xmit from __dev_queue_xmit
+  __dev_queue_xmit from __neigh_update
+  __neigh_update from neigh_update
+  neigh_update from arp_process.constprop.0
+  arp_process.constprop.0 from __netif_receive_skb_one_core
+  __netif_receive_skb_one_core from process_backlog
+  process_backlog from __napi_poll.constprop.0
+  __napi_poll.constprop.0 from net_rx_action
+  net_rx_action from __do_softirq
+  __do_softirq from call_with_stack
+  call_with_stack from do_softirq
+  do_softirq from __local_bh_enable_ip
+  __local_bh_enable_ip from netif_rx
+  netif_rx from ks8851_irq
+  ks8851_irq from irq_thread_fn
+  irq_thread_fn from irq_thread
+  irq_thread from kthread
+  kthread from ret_from_fork
+
+  The hang happens because ks8851_irq() first locks a spinlock in
+  ks8851_par.c ks8851_lock_par() spin_lock_irqsave(&ksp->lock, ...)
+  and with that spinlock locked, calls netif_rx(). Once the execution
+  reaches ks8851_start_xmit_par(), it calls ks8851_lock_par() again
+  which attempts to claim the already locked spinlock again, and the
+  hang happens.
+
+  Move the do_softirq() call outside of the spinlock protected section
+  of ks8851_irq() by disabling BHs around the entire spinlock protected
+  section of ks8851_irq() handler. Place local_bh_enable() outside of
+  the spinlock protected section, so that it can trigger do_softirq()
+  without the ks8851_par.c ks8851_lock_par() spinlock being held, and
+  safely call ks8851_start_xmit_par() without attempting to lock the
+  already locked spinlock.
+
+  Since ks8851_irq() is protected by local_bh_disable()/local_bh_enable()
+  now, replace netif_rx() with __netif_rx() which is not duplicating the
+  local_bh_disable()/local_bh_enable() calls.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35971.json
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11214'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34442'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34398'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34464'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34533'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34575'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34581'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34493'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34481'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34483'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34485'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34482'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34501'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.34494'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37336'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.3735'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37374'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37401'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.374'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37335'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37311'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37233'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37358'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37369'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37372'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37398'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37365'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.37274'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '0.00843'
+    scoring_system: epss
+    scoring_elements: '0.60118'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-05-20T15:04:05Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/492337a4fbd1421b42df684ee9b34be2a2722540
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-05-20T15:04:05Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/49d5d70538b6b8f2a3f8f1ac30c1f921d4a0929b
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-05-20T15:04:05Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/be0384bf599cf1eb8d337517feeb732d71f75a6f
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-05-20T15:04:05Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/cba376eb036c2c20077b41d47b317d8218fe754f
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35971.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-35971
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-35971
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/492337a4fbd1421b42df684ee9b34be2a2722540
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/49d5d70538b6b8f2a3f8f1ac30c1f921d4a0929b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/be0384bf599cf1eb8d337517feeb732d71f75a6f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/cba376eb036c2c20077b41d47b317d8218fe754f
+    reference_type:
+    reference_id:
+  - url: http://www.openwall.com/lists/oss-security/2024/05/30/1
+    reference_type:
+    reference_id:
+  - url: http://www.openwall.com/lists/oss-security/2024/05/30/2
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2281895
+    reference_type:
+    reference_id: 2281895
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-35971
+    reference_type:
+    reference_id: CVE-2024-35971
+  - url: https://usn.ubuntu.com/6893-1/
+    reference_type:
+    reference_id: USN-6893-1
+  - url: https://usn.ubuntu.com/6893-2/
+    reference_type:
+    reference_id: USN-6893-2
+  - url: https://usn.ubuntu.com/6893-3/
+    reference_type:
+    reference_id: USN-6893-3
+  - url: https://usn.ubuntu.com/6918-1/
+    reference_type:
+    reference_id: USN-6918-1

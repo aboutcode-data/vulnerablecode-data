@@ -1,0 +1,340 @@
+vulnerability_id: VCID-mxfz-er16-aaaj
+aliases:
+  - CVE-2024-26867
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\ncomedi: comedi_8255:\
+  \ Correct error in subdevice initialization\n\nThe refactoring done in commit 5c57b1ccecc7\
+  \ (\"comedi: comedi_8255: Rework\nsubdevice initialization functions\") to the initialization\
+  \ of the io\nfield of struct subdev_8255_private broke all cards using the\ndrivers/comedi/drivers/comedi_8255.c\
+  \ module.\n\nPrior to 5c57b1ccecc7, __subdev_8255_init() initialized the io field\nin the\
+  \ newly allocated struct subdev_8255_private to the non-NULL\ncallback given to the function,\
+  \ otherwise it used a flag parameter to\nselect between subdev_8255_mmio and subdev_8255_io.\
+  \ The refactoring\nremoved that logic and the flag, as subdev_8255_mm_init() and\nsubdev_8255_io_init()\
+  \ now explicitly pass subdev_8255_mmio and\nsubdev_8255_io respectively to __subdev_8255_init(),\
+  \ only\n__subdev_8255_init() never sets spriv->io to the supplied\ncallback. That spriv->io\
+  \ is NULL leads to a later BUG:\n\nBUG: kernel NULL pointer dereference, address: 0000000000000000\n\
+  PGD 0 P4D 0\nOops: 0010 [#1] SMP PTI\nCPU: 1 PID: 1210 Comm: systemd-udevd Not tainted 6.7.3-x86_64\
+  \ #1\nHardware name: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\nRIP: 0010:0x0\n\
+  Code: Unable to access opcode bytes at 0xffffffffffffffd6.\nRSP: 0018:ffffa3f1c02d7b78 EFLAGS:\
+  \ 00010202\nRAX: 0000000000000000 RBX: ffff91f847aefd00 RCX: 000000000000009b\nRDX: 0000000000000003\
+  \ RSI: 0000000000000001 RDI: ffff91f840f6fc00\nRBP: ffff91f840f6fc00 R08: 0000000000000000\
+  \ R09: 0000000000000001\nR10: 0000000000000000 R11: 000000000000005f R12: 0000000000000000\n\
+  R13: 0000000000000000 R14: ffffffffc0102498 R15: ffff91f847ce6ba8\nFS:  00007f72f4e8f500(0000)\
+  \ GS:ffff91f8d5c80000(0000) knlGS:0000000000000000\nCS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033\n\
+  CR2: ffffffffffffffd6 CR3: 000000010540e000 CR4: 00000000000406f0\nCall Trace:\n <TASK>\n\
+  \ ? __die_body+0x15/0x57\n ? page_fault_oops+0x2ef/0x33c\n ? insert_vmap_area.constprop.0+0xb6/0xd5\n\
+  \ ? alloc_vmap_area+0x529/0x5ee\n ? exc_page_fault+0x15a/0x489\n ? asm_exc_page_fault+0x22/0x30\n\
+  \ __subdev_8255_init+0x79/0x8d [comedi_8255]\n pci_8255_auto_attach+0x11a/0x139 [8255_pci]\n\
+  \ comedi_auto_config+0xac/0x117 [comedi]\n ? __pfx___driver_attach+0x10/0x10\n pci_device_probe+0x88/0xf9\n\
+  \ really_probe+0x101/0x248\n __driver_probe_device+0xbb/0xed\n driver_probe_device+0x1a/0x72\n\
+  \ __driver_attach+0xd4/0xed\n bus_for_each_dev+0x76/0xb8\n bus_add_driver+0xbe/0x1be\n driver_register+0x9a/0xd8\n\
+  \ comedi_pci_driver_register+0x28/0x48 [comedi_pci]\n ? __pfx_pci_8255_driver_init+0x10/0x10\
+  \ [8255_pci]\n do_one_initcall+0x72/0x183\n do_init_module+0x5b/0x1e8\n init_module_from_file+0x86/0xac\n\
+  \ __do_sys_finit_module+0x151/0x218\n do_syscall_64+0x72/0xdb\n entry_SYSCALL_64_after_hwframe+0x6e/0x76\n\
+  RIP: 0033:0x7f72f50a0cb9\nCode: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8\
+  \ 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73\
+  \ 01 c3 48 8b 0d 47 71 0c 00 f7 d8 64 89 01 48\nRSP: 002b:00007ffd47e512d8 EFLAGS: 00000246\
+  \ ORIG_RAX: 0000000000000139\nRAX: ffffffffffffffda RBX: 0000562dd06ae070 RCX: 00007f72f50a0cb9\n\
+  RDX: 0000000000000000 RSI: 00007f72f52d32df RDI: 000000000000000e\nRBP: 0000000000000000 R08:\
+  \ 00007f72f5168b20 R09: 0000000000000000\nR10: 0000000000000050 R11: 0000000000000246 R12:\
+  \ 00007f72f52d32df\nR13: 0000000000020000 R14: 0000562dd06785c0 R15: 0000562dcfd0e9a8\n </TASK>\n\
+  Modules linked in: 8255_pci(+) comedi_8255 comedi_pci comedi intel_gtt e100(+) acpi_cpufreq\
+  \ rtc_cmos usbhid\nCR2: 0000000000000000\n---[ end trace 0000000000000000 ]---\nRIP: 0010:0x0\n\
+  Code: Unable to access opcode bytes at 0xffffffffffffffd6.\nRSP: 0018:ffffa3f1c02d7b78 EFLAGS:\
+  \ 00010202\nRAX: 0000000000000000 RBX: ffff91f847aefd00 RCX: 000000000000009b\nRDX: 0000000000000003\
+  \ RSI: 0000000000000001 RDI: ffff91f840f6fc00\nRBP: ffff91f840f6fc00 R08: 0000000000000000\
+  \ R09: 0000000000000001\nR10: 0000000000000000 R11: 000000000000005f R12: 0000000000000000\n\
+  R13: 0000000000000000 R14: ffffffffc0102498 R15: ffff91f847ce6ba8\nFS: \n---truncated---"
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26867.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17279'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17125'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17072'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17224'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17244'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17277'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17296'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.1727'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17254'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17233'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17249'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17275'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17252'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17228'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17198'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22634'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22629'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22623'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.2248'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22605'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22613'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22641'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22543'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22594'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22647'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22639'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22615'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22607'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00072'
+    scoring_system: epss
+    scoring_elements: '0.22595'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '0.00283'
+    scoring_system: epss
+    scoring_elements: '0.35635'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-26867
+weaknesses:
+  - CWE-476
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26867.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-26867
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/4a825457a45d8debc46ab8cba57d47462411710d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/cfa9ba1ae0bef0681833a22d326174fe633caab5
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2275717
+    reference_type:
+    reference_id: 2275717
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.8:rc7:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.8:rc7:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-26867
+    reference_type:
+    reference_id: CVE-2024-26867

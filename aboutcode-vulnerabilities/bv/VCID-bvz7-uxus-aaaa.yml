@@ -1,0 +1,381 @@
+vulnerability_id: VCID-bvz7-uxus-aaaa
+aliases:
+  - CVE-2024-40918
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  parisc: Try to fix random segmentation faults in package builds
+
+  PA-RISC systems with PA8800 and PA8900 processors have had problems
+  with random segmentation faults for many years.  Systems with earlier
+  processors are much more stable.
+
+  Systems with PA8800 and PA8900 processors have a large L2 cache which
+  needs per page flushing for decent performance when a large range is
+  flushed. The combined cache in these systems is also more sensitive to
+  non-equivalent aliases than the caches in earlier systems.
+
+  The majority of random segmentation faults that I have looked at
+  appear to be memory corruption in memory allocated using mmap and
+  malloc.
+
+  My first attempt at fixing the random faults didn't work. On
+  reviewing the cache code, I realized that there were two issues
+  which the existing code didn't handle correctly. Both relate
+  to cache move-in. Another issue is that the present bit in PTEs
+  is racy.
+
+  1) PA-RISC caches have a mind of their own and they can speculatively
+  load data and instructions for a page as long as there is a entry in
+  the TLB for the page which allows move-in. TLBs are local to each
+  CPU. Thus, the TLB entry for a page must be purged before flushing
+  the page. This is particularly important on SMP systems.
+
+  In some of the flush routines, the flush routine would be called
+  and then the TLB entry would be purged. This was because the flush
+  routine needed the TLB entry to do the flush.
+
+  2) My initial approach to trying the fix the random faults was to
+  try and use flush_cache_page_if_present for all flush operations.
+  This actually made things worse and led to a couple of hardware
+  lockups. It finally dawned on me that some lines weren't being
+  flushed because the pte check code was racy. This resulted in
+  random inequivalent mappings to physical pages.
+
+  The __flush_cache_page tmpalias flush sets up its own TLB entry
+  and it doesn't need the existing TLB entry. As long as we can find
+  the pte pointer for the vm page, we can get the pfn and physical
+  address of the page. We can also purge the TLB entry for the page
+  before doing the flush. Further, __flush_cache_page uses a special
+  TLB entry that inhibits cache move-in.
+
+  When switching page mappings, we need to ensure that lines are
+  removed from the cache.  It is not sufficient to just flush the
+  lines to memory as they may come back.
+
+  This made it clear that we needed to implement all the required
+  flush operations using tmpalias routines. This includes flushes
+  for user and kernel pages.
+
+  After modifying the code to use tmpalias flushes, it became clear
+  that the random segmentation faults were not fully resolved. The
+  frequency of faults was worse on systems with a 64 MB L2 (PA8900)
+  and systems with more CPUs (rp4440).
+
+  The warning that I added to flush_cache_page_if_present to detect
+  pages that couldn't be flushed triggered frequently on some systems.
+
+  Helge and I looked at the pages that couldn't be flushed and found
+  that the PTE was either cleared or for a swap page. Ignoring pages
+  that were swapped out seemed okay but pages with cleared PTEs seemed
+  problematic.
+
+  I looked at routines related to pte_clear and noticed ptep_clear_flush.
+  The default implementation just flushes the TLB entry. However, it was
+  obvious that on parisc we need to flush the cache page as well. If
+  we don't flush the cache page, stale lines will be left in the cache
+  and cause random corruption. Once a PTE is cleared, there is no way
+  to find the physical address associated with the PTE and flush the
+  associated page at a later time.
+
+  I implemented an updated change with a parisc specific version of
+  ptep_clear_flush. It fixed the random data corruption on Helge's rp4440
+  and rp3440, as well as on my c8000.
+
+  At this point, I realized that I could restore the code where we only
+  flush in flush_cache_page_if_present if the page has been accessed.
+  However, for this, we also need to flush the cache when the accessed
+  bit is cleared in
+  ---truncated---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-40918.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24915'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24772'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.2483'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.2488'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24926'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24925'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24894'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24881'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24869'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24873'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24885'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24906'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.2489'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00081'
+    scoring_system: epss
+    scoring_elements: '0.24877'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.24991'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.25015'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.25023'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.24982'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.24912'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.25029'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.001'
+    scoring_system: epss
+    scoring_elements: '0.2485'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26791'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26753'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26732'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26788'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.2676'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26708'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26713'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00112'
+    scoring_system: epss
+    scoring_elements: '0.26751'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '0.00424'
+    scoring_system: epss
+    scoring_elements: '0.45207'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-99
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-40918.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-40918
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40918
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5bf196f1936bf93df31112fbdfb78c03537c07b0
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/72d95924ee35c8cd16ef52f912483ee938a34d49
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d66f2607d89f760cdffed88b22f309c895a2af20
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2297502
+    reference_type:
+    reference_id: 2297502
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-40918
+    reference_type:
+    reference_id: CVE-2024-40918
+  - url: https://usn.ubuntu.com/6999-1/
+    reference_type:
+    reference_id: USN-6999-1
+  - url: https://usn.ubuntu.com/6999-2/
+    reference_type:
+    reference_id: USN-6999-2
+  - url: https://usn.ubuntu.com/7004-1/
+    reference_type:
+    reference_id: USN-7004-1
+  - url: https://usn.ubuntu.com/7005-1/
+    reference_type:
+    reference_id: USN-7005-1
+  - url: https://usn.ubuntu.com/7005-2/
+    reference_type:
+    reference_id: USN-7005-2
+  - url: https://usn.ubuntu.com/7008-1/
+    reference_type:
+    reference_id: USN-7008-1
+  - url: https://usn.ubuntu.com/7029-1/
+    reference_type:
+    reference_id: USN-7029-1

@@ -1,0 +1,181 @@
+vulnerability_id: VCID-nbea-8fpk-17df
+aliases:
+  - CVE-2025-22111
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  net: Remove RTNL dance for SIOCBRADDIF and SIOCBRDELIF.
+
+  SIOCBRDELIF is passed to dev_ioctl() first and later forwarded to
+  br_ioctl_call(), which causes unnecessary RTNL dance and the splat
+  below [0] under RTNL pressure.
+
+  Let's say Thread A is trying to detach a device from a bridge and
+  Thread B is trying to remove the bridge.
+
+  In dev_ioctl(), Thread A bumps the bridge device's refcnt by
+  netdev_hold() and releases RTNL because the following br_ioctl_call()
+  also re-acquires RTNL.
+
+  In the race window, Thread B could acquire RTNL and try to remove
+  the bridge device.  Then, rtnl_unlock() by Thread B will release RTNL
+  and wait for netdev_put() by Thread A.
+
+  Thread A, however, must hold RTNL after the unlock in dev_ifsioc(),
+  which may take long under RTNL pressure, resulting in the splat by
+  Thread B.
+
+    Thread A (SIOCBRDELIF)           Thread B (SIOCBRDELBR)
+    ----------------------           ----------------------
+    sock_ioctl                       sock_ioctl
+    `- sock_do_ioctl                 `- br_ioctl_call
+       `- dev_ioctl                     `- br_ioctl_stub
+          |- rtnl_lock                     |
+          |- dev_ifsioc                    '
+          '  |- dev = __dev_get_by_name(...)
+             |- netdev_hold(dev, ...)      .
+         /   |- rtnl_unlock  ------.       |
+         |   |- br_ioctl_call       `--->  |- rtnl_lock
+    Race |   |  `- br_ioctl_stub           |- br_del_bridge
+    Window   |     |                       |  |- dev = __dev_get_by_name(...)
+         |   |     |  May take long        |  `- br_dev_delete(dev, ...)
+         |   |     |  under RTNL pressure  |     `- unregister_netdevice_queue(dev, ...)
+         |   |     |               |       `- rtnl_unlock
+         \   |     |- rtnl_lock  <-'          `- netdev_run_todo
+             |     |- ...                        `- netdev_run_todo
+             |     `- rtnl_unlock                   |- __rtnl_unlock
+             |                                      |- netdev_wait_allrefs_any
+             |- netdev_put(dev, ...)  <----------------'
+                                                  Wait refcnt decrement
+                                                  and log splat below
+
+  To avoid blocking SIOCBRDELBR unnecessarily, let's not call
+  dev_ioctl() for SIOCBRADDIF and SIOCBRDELIF.
+
+  In the dev_ioctl() path, we do the following:
+
+    1. Copy struct ifreq by get_user_ifreq in sock_do_ioctl()
+    2. Check CAP_NET_ADMIN in dev_ioctl()
+    3. Call dev_load() in dev_ioctl()
+    4. Fetch the master dev from ifr.ifr_name in dev_ifsioc()
+
+  3. can be done by request_module() in br_ioctl_call(), so we move
+  1., 2., and 4. to br_ioctl_stub().
+
+  Note that 2. is also checked later in add_del_if(), but it's better
+  performed before RTNL.
+
+  SIOCBRADDIF and SIOCBRDELIF have been processed in dev_ioctl() since
+  the pre-git era, and there seems to be no specific reason to process
+  them there.
+
+  [0]:
+  unregister_netdevice: waiting for wpan3 to become free. Usage count = 2
+  ref_tracker: wpan3@ffff8880662d8608 has 1/1 users at
+       __netdev_tracker_alloc include/linux/netdevice.h:4282 [inline]
+       netdev_hold include/linux/netdevice.h:4311 [inline]
+       dev_ifsioc+0xc6a/0x1160 net/core/dev_ioctl.c:624
+       dev_ioctl+0x255/0x10c0 net/core/dev_ioctl.c:826
+       sock_do_ioctl+0x1ca/0x260 net/socket.c:1213
+       sock_ioctl+0x23a/0x6c0 net/socket.c:1318
+       vfs_ioctl fs/ioctl.c:51 [inline]
+       __do_sys_ioctl fs/ioctl.c:906 [inline]
+       __se_sys_ioctl fs/ioctl.c:892 [inline]
+       __x64_sys_ioctl+0x1a4/0x210 fs/ioctl.c:892
+       do_syscall_x64 arch/x86/entry/common.c:52 [inline]
+       do_syscall_64+0xcb/0x250 arch/x86/entry/common.c:83
+       entry_SYSCALL_64_after_hwframe+0x77/0x7f
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22111.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03277'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03268'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03279'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03264'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03263'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04937'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04901'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04923'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04919'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04929'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04931'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04944'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+  - score: '4.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22111.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22111
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/00fe0ac64efd1f5373b3dd9f1f84b19235371e39
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ed3ba9b6e280e14cc3148c1b226ba453f02fa76c
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360257
+    reference_type:
+    reference_id: 2360257
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22111
+    reference_type:
+    reference_id: CVE-2025-22111

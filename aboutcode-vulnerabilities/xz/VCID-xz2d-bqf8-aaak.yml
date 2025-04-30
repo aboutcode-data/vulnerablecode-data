@@ -1,0 +1,75 @@
+vulnerability_id: VCID-xz2d-bqf8-aaak
+aliases:
+  - GHSA-c45c-39f6-6gw9
+summary: |
+  Rancher generated tokens not revoked after modifications made to authentication provider
+  ### Impact
+
+  This issue affects Rancher versions from 2.5.0 up to and including 2.5.16, from 2.6.0 up to and including 2.6.9 and 2.7.0. It only affects Rancher setups that have an external [authentication provider](https://ranchermanager.docs.rancher.com/pages-for-subheaders/authentication-config) configured or had one configured in the past.
+
+  It was discovered that when an external authentication provider is configured in Rancher and then disabled, the Rancher generated [tokens](https://ranchermanager.docs.rancher.com/reference-guides/about-the-api/api-tokens) associated with users who had access granted through the now disabled auth provider are not revoked. This allows users to retain access to Rancher and `kubectl` access to clusters managed by Rancher, according to their previous configured permissions, even after they are supposed to have lost it due to the auth provider been disabled.
+
+  The problem also occurs if the auth provider is configured (and is still enabled) to use the [access level scopes](https://ranchermanager.docs.rancher.com/pages-for-subheaders/authentication-config) `allow members of clusters and projects, plus authorized users & groups` and `restrict access to only the authorized users & groups`. In this case, removing users and groups from the authorized lists will not revoke the access tokens and they will remain valid.
+
+
+  An example scenario is:
+
+  1. OpenLDAP, MS Active Directory (AD) or any other external [authentication provider](https://ranchermanager.docs.rancher.com/pages-for-subheaders/authentication-config) is configured as an auth provider.
+  2. A user (`cluster-owner`) is granted `cluster-owner` permissions on a downstream cluster (`test-cluster`).
+  3. `cluster-owner` logs in using their external auth provider username and password.
+  4. `cluster-owner` generates a `kubeconfig` token for `test-cluster`.
+  5. The configured external auth provider is disabled.
+
+  In this scenario, the `kubeconfig` generated in step 4 will still be valid after step 5, and `test-cluster` can still be accessed using the `kubeconfig` token.
+
+  By default, tokens for authenticated session have their `ttl` (time to live) set to `960` minutes, so they will expire after `16` hours. `kubeconfig` tokens are configured to never expire, and their `ttl` is set to `0`. These configurations can be changed in the Rancher's settings (`Configuration > Global Settings > Settings`) with the [parameters](https://ranchermanager.docs.rancher.com/reference-guides/about-the-api/api-tokens)  `auth-user-session-ttl-minutes` and `kubeconfig-default-token-ttl-minutes`, respectively.
+
+  ### Workarounds
+
+  If you cannot update to a patched Rancher version, the recommended workaround is to review and remove tokens associated with auth providers manually.
+
+  The tokens can be reviewed by executing `kubectl get tokens` in Rancher's `local` cluster. Each found token must be manually reviewed to check if it belongs to a user from a disabled auth provider or a user who's access was previously removed from the auth provider (when the auth provider is still enabled and is or was configured to use access level scopes, as mentioned above). The identified tokens can be removed with `kubectl delete tokens <token_name>`.
+
+  It is important to mention that this workaround must be done every time an auth provider is disabled in case you cannot update to a patched version.
+
+  ### Patches
+
+  Patched versions include releases 2.5.17, 2.6.10, 2.7.1 and later versions. After updating to a patched version, it is highly recommended to review the existing tokens and remove tokens related to disabled auth providers as described above in the workaround section.
+
+  ### For more information
+
+  If you have any questions or comments about this advisory:
+
+  * Reach out to [SUSE Rancher Security team](https://github.com/rancher/rancher/security/policy) for security related inquiries.
+  * Open an issue in [Rancher](https://github.com/rancher/rancher/issues/new/choose) repository.
+  * Verify our [support matrix](https://www.suse.com/suse-rancher/support-matrix/all-supported-versions/) and [product support lifecycle](https://www.suse.com/lifecycle/).
+severities:
+  - score: '9.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/rancher/rancher
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rancher/rancher
+  - score: '8.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/rancher/rancher/security/advisories/GHSA-c45c-39f6-6gw9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rancher/rancher/security/advisories/GHSA-c45c-39f6-6gw9
+weaknesses:
+  - CWE-287
+references:
+  - url: https://github.com/rancher/rancher
+    reference_type:
+    reference_id:
+  - url: https://github.com/rancher/rancher/security/advisories/GHSA-c45c-39f6-6gw9
+    reference_type:
+    reference_id:

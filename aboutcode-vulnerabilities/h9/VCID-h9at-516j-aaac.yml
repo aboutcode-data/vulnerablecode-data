@@ -1,0 +1,391 @@
+vulnerability_id: VCID-h9at-516j-aaac
+aliases:
+  - CVE-2024-26873
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  scsi: hisi_sas: Fix a deadlock issue related to automatic dump
+
+  If we issue a disabling PHY command, the device attached with it will go
+  offline, if a 2 bit ECC error occurs at the same time, a hung task may be
+  found:
+
+  [ 4613.652388] INFO: task kworker/u256:0:165233 blocked for more than 120 seconds.
+  [ 4613.666297] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+  [ 4613.674809] task:kworker/u256:0  state:D stack:    0 pid:165233 ppid:     2 flags:0x00000208
+  [ 4613.683959] Workqueue: 0000:74:02.0_disco_q sas_revalidate_domain [libsas]
+  [ 4613.691518] Call trace:
+  [ 4613.694678]  __switch_to+0xf8/0x17c
+  [ 4613.698872]  __schedule+0x660/0xee0
+  [ 4613.703063]  schedule+0xac/0x240
+  [ 4613.706994]  schedule_timeout+0x500/0x610
+  [ 4613.711705]  __down+0x128/0x36c
+  [ 4613.715548]  down+0x240/0x2d0
+  [ 4613.719221]  hisi_sas_internal_abort_timeout+0x1bc/0x260 [hisi_sas_main]
+  [ 4613.726618]  sas_execute_internal_abort+0x144/0x310 [libsas]
+  [ 4613.732976]  sas_execute_internal_abort_dev+0x44/0x60 [libsas]
+  [ 4613.739504]  hisi_sas_internal_task_abort_dev.isra.0+0xbc/0x1b0 [hisi_sas_main]
+  [ 4613.747499]  hisi_sas_dev_gone+0x174/0x250 [hisi_sas_main]
+  [ 4613.753682]  sas_notify_lldd_dev_gone+0xec/0x2e0 [libsas]
+  [ 4613.759781]  sas_unregister_common_dev+0x4c/0x7a0 [libsas]
+  [ 4613.765962]  sas_destruct_devices+0xb8/0x120 [libsas]
+  [ 4613.771709]  sas_do_revalidate_domain.constprop.0+0x1b8/0x31c [libsas]
+  [ 4613.778930]  sas_revalidate_domain+0x60/0xa4 [libsas]
+  [ 4613.784716]  process_one_work+0x248/0x950
+  [ 4613.789424]  worker_thread+0x318/0x934
+  [ 4613.793878]  kthread+0x190/0x200
+  [ 4613.797810]  ret_from_fork+0x10/0x18
+  [ 4613.802121] INFO: task kworker/u256:4:316722 blocked for more than 120 seconds.
+  [ 4613.816026] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+  [ 4613.824538] task:kworker/u256:4  state:D stack:    0 pid:316722 ppid:     2 flags:0x00000208
+  [ 4613.833670] Workqueue: 0000:74:02.0 hisi_sas_rst_work_handler [hisi_sas_main]
+  [ 4613.841491] Call trace:
+  [ 4613.844647]  __switch_to+0xf8/0x17c
+  [ 4613.848852]  __schedule+0x660/0xee0
+  [ 4613.853052]  schedule+0xac/0x240
+  [ 4613.856984]  schedule_timeout+0x500/0x610
+  [ 4613.861695]  __down+0x128/0x36c
+  [ 4613.865542]  down+0x240/0x2d0
+  [ 4613.869216]  hisi_sas_controller_prereset+0x58/0x1fc [hisi_sas_main]
+  [ 4613.876324]  hisi_sas_rst_work_handler+0x40/0x8c [hisi_sas_main]
+  [ 4613.883019]  process_one_work+0x248/0x950
+  [ 4613.887732]  worker_thread+0x318/0x934
+  [ 4613.892204]  kthread+0x190/0x200
+  [ 4613.896118]  ret_from_fork+0x10/0x18
+  [ 4613.900423] INFO: task kworker/u256:1:348985 blocked for more than 121 seconds.
+  [ 4613.914341] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+  [ 4613.922852] task:kworker/u256:1  state:D stack:    0 pid:348985 ppid:     2 flags:0x00000208
+  [ 4613.931984] Workqueue: 0000:74:02.0_event_q sas_port_event_worker [libsas]
+  [ 4613.939549] Call trace:
+  [ 4613.942702]  __switch_to+0xf8/0x17c
+  [ 4613.946892]  __schedule+0x660/0xee0
+  [ 4613.951083]  schedule+0xac/0x240
+  [ 4613.955015]  schedule_timeout+0x500/0x610
+  [ 4613.959725]  wait_for_common+0x200/0x610
+  [ 4613.964349]  wait_for_completion+0x3c/0x5c
+  [ 4613.969146]  flush_workqueue+0x198/0x790
+  [ 4613.973776]  sas_porte_broadcast_rcvd+0x1e8/0x320 [libsas]
+  [ 4613.979960]  sas_port_event_worker+0x54/0xa0 [libsas]
+  [ 4613.985708]  process_one_work+0x248/0x950
+  [ 4613.990420]  worker_thread+0x318/0x934
+  [ 4613.994868]  kthread+0x190/0x200
+  [ 4613.998800]  ret_from_fork+0x10/0x18
+
+  This is because when the device goes offline, we obtain the hisi_hba
+  semaphore and send the ABORT_DEV command to the device. However, the
+  internal abort timed out due to the 2 bit ECC error and triggers automatic
+  dump. In addition, since the hisi_hba semaphore has been obtained, the dump
+  cannot be executed and the controller cannot be reset.
+
+  Therefore, the deadlocks occur on the following circular dependencies
+  ---truncated---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26873.json
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10311'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.1037'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10427'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10446'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10436'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10439'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10449'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10464'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10517'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10539'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10531'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10465'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10358'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18578'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18689'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18704'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18723'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18761'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18747'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18715'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18688'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18653'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18732'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18725'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18698'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.18707'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.1869'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.0007'
+    scoring_system: epss
+    scoring_elements: '0.1854'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '0.00297'
+    scoring_system: epss
+    scoring_elements: '0.36765'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-04-23T14:02:10Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/3c4f53b2c341ec6428b98cb51a89a09b025d0953
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-04-23T14:02:10Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/85c98073ffcfe9e46abfb9c66f3364467119d563
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-04-23T14:02:10Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/a47f0b03149af538af4442ff0702eac430ace1cb
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-04-23T14:02:10Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/e022dd3b875315a2d2001a512e98d1dc8c991f4a
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-26873
+weaknesses:
+  - CWE-667
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26873.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-26873
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3c4f53b2c341ec6428b98cb51a89a09b025d0953
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/85c98073ffcfe9e46abfb9c66f3364467119d563
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e022dd3b875315a2d2001a512e98d1dc8c991f4a
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2275705
+    reference_type:
+    reference_id: 2275705
+  - url: https://git.kernel.org/stable/c/a47f0b03149af538af4442ff0702eac430ace1cb
+    reference_type:
+    reference_id: a47f0b03149af538af4442ff0702eac430ace1cb
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-26873
+    reference_type:
+    reference_id: CVE-2024-26873
+  - url: https://usn.ubuntu.com/6816-1/
+    reference_type:
+    reference_id: USN-6816-1
+  - url: https://usn.ubuntu.com/6817-1/
+    reference_type:
+    reference_id: USN-6817-1
+  - url: https://usn.ubuntu.com/6817-2/
+    reference_type:
+    reference_id: USN-6817-2
+  - url: https://usn.ubuntu.com/6817-3/
+    reference_type:
+    reference_id: USN-6817-3
+  - url: https://usn.ubuntu.com/6878-1/
+    reference_type:
+    reference_id: USN-6878-1

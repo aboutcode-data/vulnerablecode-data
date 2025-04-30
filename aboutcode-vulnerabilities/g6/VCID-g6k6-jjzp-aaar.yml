@@ -1,0 +1,318 @@
+vulnerability_id: VCID-g6k6-jjzp-aaar
+aliases:
+  - CVE-2023-52761
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  riscv: VMAP_STACK overflow detection thread-safe
+
+  commit 31da94c25aea ("riscv: add VMAP_STACK overflow detection") added
+  support for CONFIG_VMAP_STACK. If overflow is detected, CPU switches to
+  `shadow_stack` temporarily before switching finally to per-cpu
+  `overflow_stack`.
+
+  If two CPUs/harts are racing and end up in over flowing kernel stack, one
+  or both will end up corrupting each other state because `shadow_stack` is
+  not per-cpu. This patch optimizes per-cpu overflow stack switch by
+  directly picking per-cpu `overflow_stack` and gets rid of `shadow_stack`.
+
+  Following are the changes in this patch
+
+   - Defines an asm macro to obtain per-cpu symbols in destination
+     register.
+   - In entry.S, when overflow is detected, per-cpu overflow stack is
+     located using per-cpu asm macro. Computing per-cpu symbol requires
+     a temporary register. x31 is saved away into CSR_SCRATCH
+     (CSR_SCRATCH is anyways zero since we're in kernel).
+
+  Please see Links for additional relevant disccussion and alternative
+  solution.
+
+  Tested by `echo EXHAUST_STACK > /sys/kernel/debug/provoke-crash/DIRECT`
+  Kernel crash log below
+
+   Insufficient stack space to handle exception!/debug/provoke-crash/DIRECT
+   Task stack:     [0xff20000010a98000..0xff20000010a9c000]
+   Overflow stack: [0xff600001f7d98370..0xff600001f7d99370]
+   CPU: 1 PID: 205 Comm: bash Not tainted 6.1.0-rc2-00001-g328a1f96f7b9 #34
+   Hardware name: riscv-virtio,qemu (DT)
+   epc : __memset+0x60/0xfc
+    ra : recursive_loop+0x48/0xc6 [lkdtm]
+   epc : ffffffff808de0e4 ra : ffffffff0163a752 sp : ff20000010a97e80
+    gp : ffffffff815c0330 tp : ff600000820ea280 t0 : ff20000010a97e88
+    t1 : 000000000000002e t2 : 3233206874706564 s0 : ff20000010a982b0
+    s1 : 0000000000000012 a0 : ff20000010a97e88 a1 : 0000000000000000
+    a2 : 0000000000000400 a3 : ff20000010a98288 a4 : 0000000000000000
+    a5 : 0000000000000000 a6 : fffffffffffe43f0 a7 : 00007fffffffffff
+    s2 : ff20000010a97e88 s3 : ffffffff01644680 s4 : ff20000010a9be90
+    s5 : ff600000842ba6c0 s6 : 00aaaaaac29e42b0 s7 : 00fffffff0aa3684
+    s8 : 00aaaaaac2978040 s9 : 0000000000000065 s10: 00ffffff8a7cad10
+    s11: 00ffffff8a76a4e0 t3 : ffffffff815dbaf4 t4 : ffffffff815dbaf4
+    t5 : ffffffff815dbab8 t6 : ff20000010a9bb48
+   status: 0000000200000120 badaddr: ff20000010a97e88 cause: 000000000000000f
+   Kernel panic - not syncing: Kernel stack overflow
+   CPU: 1 PID: 205 Comm: bash Not tainted 6.1.0-rc2-00001-g328a1f96f7b9 #34
+   Hardware name: riscv-virtio,qemu (DT)
+   Call Trace:
+   [<ffffffff80006754>] dump_backtrace+0x30/0x38
+   [<ffffffff808de798>] show_stack+0x40/0x4c
+   [<ffffffff808ea2a8>] dump_stack_lvl+0x44/0x5c
+   [<ffffffff808ea2d8>] dump_stack+0x18/0x20
+   [<ffffffff808dec06>] panic+0x126/0x2fe
+   [<ffffffff800065ea>] walk_stackframe+0x0/0xf0
+   [<ffffffff0163a752>] recursive_loop+0x48/0xc6 [lkdtm]
+   SMP: stopping secondary CPUs
+   ---[ end Kernel panic - not syncing: Kernel stack overflow ]---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52761.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.2056'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20394'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.2046'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20517'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20577'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20573'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20559'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20536'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20532'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20543'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20546'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20562'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.20567'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.2291'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22868'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22887'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22896'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22817'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22963'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22981'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22988'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22979'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22927'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22891'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22905'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22964'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00089'
+    scoring_system: epss
+    scoring_elements: '0.22949'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+  - score: '0.00377'
+    scoring_system: epss
+    scoring_elements: '0.4232'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+weaknesses:
+  - CWE-121
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52761.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52761
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-52761
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/1493baaf09e3c1899959c8a107cd1207e16d1788
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/be97d0db5f44c0674480cb79ac6f5b0529b84c76
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/eff53aea3855f71992c043cebb1c00988c17ee20
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2282739
+    reference_type:
+    reference_id: 2282739
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52761
+    reference_type:
+    reference_id: CVE-2023-52761

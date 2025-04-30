@@ -1,0 +1,310 @@
+vulnerability_id: VCID-5bqu-67vg-aaan
+aliases:
+  - CVE-2022-48644
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nnet/sched:\
+  \ taprio: avoid disabling offload when it was never enabled\n\nIn an incredibly strange API\
+  \ design decision, qdisc->destroy() gets\ncalled even if qdisc->init() never succeeded, not\
+  \ exclusively since\ncommit 87b60cfacf9f (\"net_sched: fix error recovery at qdisc creation\"\
+  ),\nbut apparently also earlier (in the case of qdisc_create_dflt()).\n\nThe taprio qdisc\
+  \ does not fully acknowledge this when it attempts full\noffload, because it starts off with\
+  \ q->flags = TAPRIO_FLAGS_INVALID in\ntaprio_init(), then it replaces q->flags with TCA_TAPRIO_ATTR_FLAGS\n\
+  parsed from netlink (in taprio_change(), tail called from taprio_init()).\n\nBut in taprio_destroy(),\
+  \ we call taprio_disable_offload(), and this\ndetermines what to do based on FULL_OFFLOAD_IS_ENABLED(q->flags).\n\
+  \nBut looking at the implementation of FULL_OFFLOAD_IS_ENABLED()\n(a bitwise check of bit\
+  \ 1 in q->flags), it is invalid to call this macro\non q->flags when it contains TAPRIO_FLAGS_INVALID,\
+  \ because that is set\nto U32_MAX, and therefore FULL_OFFLOAD_IS_ENABLED() will return true\
+  \ on\nan invalid set of flags.\n\nAs a result, it is possible to crash the kernel if user\
+  \ space forces an\nerror between setting q->flags = TAPRIO_FLAGS_INVALID, and the calling\n\
+  of taprio_enable_offload(). This is because drivers do not expect the\noffload to be disabled\
+  \ when it was never enabled.\n\nThe error that we force here is to attach taprio as a non-root\
+  \ qdisc,\nbut instead as child of an mqprio root qdisc:\n\n$ tc qdisc add dev swp0 root handle\
+  \ 1: \\\n\tmqprio num_tc 8 map 0 1 2 3 4 5 6 7 \\\n\tqueues 1@0 1@1 1@2 1@3 1@4 1@5 1@6 1@7\
+  \ hw 0\n$ tc qdisc replace dev swp0 parent 1:1 \\\n\ttaprio num_tc 8 map 0 1 2 3 4 5 6 7 \\\
+  \n\tqueues 1@0 1@1 1@2 1@3 1@4 1@5 1@6 1@7 base-time 0 \\\n\tsched-entry S 0x7f 990000 sched-entry\
+  \ S 0x80 100000 \\\n\tflags 0x0 clockid CLOCK_TAI\nUnable to handle kernel paging request\
+  \ at virtual address fffffffffffffff8\n[fffffffffffffff8] pgd=0000000000000000, p4d=0000000000000000\n\
+  Internal error: Oops: 96000004 [#1] PREEMPT SMP\nCall trace:\n taprio_dump+0x27c/0x310\n vsc9959_port_setup_tc+0x1f4/0x460\n\
+  \ felix_port_setup_tc+0x24/0x3c\n dsa_slave_setup_tc+0x54/0x27c\n taprio_disable_offload.isra.0+0x58/0xe0\n\
+  \ taprio_destroy+0x80/0x104\n qdisc_create+0x240/0x470\n tc_modify_qdisc+0x1fc/0x6b0\n rtnetlink_rcv_msg+0x12c/0x390\n\
+  \ netlink_rcv_skb+0x5c/0x130\n rtnetlink_rcv+0x1c/0x2c\n\nFix this by keeping track of the\
+  \ operations we made, and undo the\noffload only if we actually did it.\n\nI've added \"bool\
+  \ offloaded\" inside a 4 byte hole between \"int clockid\"\nand \"atomic64_t picos_per_byte\"\
+  . Now the first cache line looks like\nbelow:\n\n$ pahole -C taprio_sched net/sched/sch_taprio.o\n\
+  struct taprio_sched {\n        struct Qdisc * *           qdiscs;               /*     0 \
+  \    8 */\n        struct Qdisc *             root;                 /*     8     8 */\n  \
+  \      u32                        flags;                /*    16     4 */\n        enum tk_offsets\
+  \            tk_offset;            /*    20     4 */\n        int                        clockid;\
+  \              /*    24     4 */\n        bool                       offloaded;          \
+  \  /*    28     1 */\n\n        /* XXX 3 bytes hole, try to pack */\n\n        atomic64_t\
+  \                 picos_per_byte;       /*    32     0 */\n\n        /* XXX 8 bytes hole,\
+  \ try to pack */\n\n        spinlock_t                 current_entry_lock;   /*    40    \
+  \ 0 */\n\n        /* XXX 8 bytes hole, try to pack */\n\n        struct sched_entry *    \
+  \   current_entry;        /*    48     8 */\n        struct sched_gate_list *   oper_sched;\
+  \           /*    56     8 */\n        /* --- cacheline 1 boundary (64 bytes) --- */"
+severities:
+  - score: '6.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48644.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33196'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.2869'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.3324'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33219'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28658'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28789'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28802'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28835'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28793'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28759'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28766'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.288'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28826'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28831'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28801'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28787'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.28767'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33161'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33223'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33284'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33329'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33333'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33259'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33236'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33237'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33235'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00126'
+    scoring_system: epss
+    scoring_elements: '0.33248'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '0.00497'
+    scoring_system: epss
+    scoring_elements: '0.48719'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-824
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48644.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-48644
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48644
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/586def6ebed195f3594a4884f7c5334d0e1ad1bb
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c7c9c7eb305ab8b4e93e4e4e1b78d8cfcbc26323
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d12a1eb07003e597077329767c6aa86a7e972c76
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/db46e3a88a09c5cf7e505664d01da7238cd56c92
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f58e43184226e5e9662088ccf1389e424a3a4cbd
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2277819
+    reference_type:
+    reference_id: 2277819
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2022-48644
+    reference_type:
+    reference_id: CVE-2022-48644

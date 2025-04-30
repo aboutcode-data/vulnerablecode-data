@@ -1,0 +1,174 @@
+vulnerability_id: VCID-38jy-wrq1-2yhd
+aliases:
+  - CVE-2025-22090
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  x86/mm/pat: Fix VM_PAT handling when fork() fails in copy_page_range()
+
+  If track_pfn_copy() fails, we already added the dst VMA to the maple
+  tree. As fork() fails, we'll cleanup the maple tree, and stumble over
+  the dst VMA for which we neither performed any reservation nor copied
+  any page tables.
+
+  Consequently untrack_pfn() will see VM_PAT and try obtaining the
+  PAT information from the page table -- which fails because the page
+  table was not copied.
+
+  The easiest fix would be to simply clear the VM_PAT flag of the dst VMA
+  if track_pfn_copy() fails. However, the whole thing is about "simply"
+  clearing the VM_PAT flag is shaky as well: if we passed track_pfn_copy()
+  and performed a reservation, but copying the page tables fails, we'll
+  simply clear the VM_PAT flag, not properly undoing the reservation ...
+  which is also wrong.
+
+  So let's fix it properly: set the VM_PAT flag only if the reservation
+  succeeded (leaving it clear initially), and undo the reservation if
+  anything goes wrong while copying the page tables: clearing the VM_PAT
+  flag after undoing the reservation.
+
+  Note that any copied page table entries will get zapped when the VMA will
+  get removed later, after copy_page_range() succeeded; as VM_PAT is not set
+  then, we won't try cleaning VM_PAT up once more and untrack_pfn() will be
+  happy. Note that leaving these page tables in place without a reservation
+  is not a problem, as we are aborting fork(); this process will never run.
+
+  A reproducer can trigger this usually at the first try:
+
+    https://gitlab.com/davidhildenbrand/scratchspace/-/raw/main/reproducers/pat_fork.c
+
+    WARNING: CPU: 26 PID: 11650 at arch/x86/mm/pat/memtype.c:983 get_pat_info+0xf6/0x110
+    Modules linked in: ...
+    CPU: 26 UID: 0 PID: 11650 Comm: repro3 Not tainted 6.12.0-rc5+ #92
+    Hardware name: QEMU Standard PC (Q35 + ICH9, 2009), BIOS 1.16.3-2.fc40 04/01/2014
+    RIP: 0010:get_pat_info+0xf6/0x110
+    ...
+    Call Trace:
+     <TASK>
+     ...
+     untrack_pfn+0x52/0x110
+     unmap_single_vma+0xa6/0xe0
+     unmap_vmas+0x105/0x1f0
+     exit_mmap+0xf6/0x460
+     __mmput+0x4b/0x120
+     copy_process+0x1bf6/0x2aa0
+     kernel_clone+0xab/0x440
+     __do_sys_clone+0x66/0x90
+     do_syscall_64+0x95/0x180
+
+  Likely this case was missed in:
+
+    d155df53f310 ("x86/mm/pat: clear VM_PAT if copy_p4d_range failed")
+
+  ... and instead of undoing the reservation we simply cleared the VM_PAT flag.
+
+  Keep the documentation of these functions in include/linux/pgtable.h,
+  one place is more than sufficient -- we should clean that up for the other
+  functions like track_pfn_remap/untrack_pfn separately.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22090.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03093'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03082'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03092'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03074'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03075'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04755'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04716'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04746'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04741'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04749'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04751'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04764'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-459
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22090.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22090
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-22090
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/8d6373f83f367dbed316ddeb178130a3a64b5b67
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b07398e8a5da517083f5c3f2daa8f6681b48ab28
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/da381c33f3aa6406406c9fdf07b8b0b63e0ce722
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/dc84bc2aba85a1508f04a936f9f9a15f64ebfb31
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/de6185b8892d88142ef69768fe4077cbf40109c0
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360286
+    reference_type:
+    reference_id: 2360286
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22090
+    reference_type:
+    reference_id: CVE-2025-22090

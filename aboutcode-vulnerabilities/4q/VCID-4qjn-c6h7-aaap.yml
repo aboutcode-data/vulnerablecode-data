@@ -1,0 +1,367 @@
+vulnerability_id: VCID-4qjn-c6h7-aaap
+aliases:
+  - CVE-2022-48629
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  crypto: qcom-rng - ensure buffer for generate is completely filled
+
+  The generate function in struct rng_alg expects that the destination
+  buffer is completely filled if the function returns 0. qcom_rng_read()
+  can run into a situation where the buffer is partially filled with
+  randomness and the remaining part of the buffer is zeroed since
+  qcom_rng_generate() doesn't check the return value. This issue can
+  be reproduced by running the following from libkcapi:
+
+      kcapi-rng -b 9000000 > OUTFILE
+
+  The generated OUTFILE will have three huge sections that contain all
+  zeros, and this is caused by the code where the test
+  'val & PRNG_STATUS_DATA_AVAIL' fails.
+
+  Let's fix this issue by ensuring that qcom_rng_read() always returns
+  with a full buffer if the function returns success. Let's also have
+  qcom_rng_generate() return the correct value.
+
+  Here's some statistics from the ent project
+  (https://www.fourmilab.ch/random/) that shows information about the
+  quality of the generated numbers:
+
+      $ ent -c qcom-random-before
+      Value Char Occurrences Fraction
+        0           606748   0.067416
+        1            33104   0.003678
+        2            33001   0.003667
+      ...
+      253   ?        32883   0.003654
+      254   ?        33035   0.003671
+      255   ?        33239   0.003693
+
+      Total:       9000000   1.000000
+
+      Entropy = 7.811590 bits per byte.
+
+      Optimum compression would reduce the size
+      of this 9000000 byte file by 2 percent.
+
+      Chi square distribution for 9000000 samples is 9329962.81, and
+      randomly would exceed this value less than 0.01 percent of the
+      times.
+
+      Arithmetic mean value of data bytes is 119.3731 (127.5 = random).
+      Monte Carlo value for Pi is 3.197293333 (error 1.77 percent).
+      Serial correlation coefficient is 0.159130 (totally uncorrelated =
+      0.0).
+
+  Without this patch, the results of the chi-square test is 0.01%, and
+  the numbers are certainly not random according to ent's project page.
+  The results improve with this patch:
+
+      $ ent -c qcom-random-after
+      Value Char Occurrences Fraction
+        0            35432   0.003937
+        1            35127   0.003903
+        2            35424   0.003936
+      ...
+      253   ?        35201   0.003911
+      254   ?        34835   0.003871
+      255   ?        35368   0.003930
+
+      Total:       9000000   1.000000
+
+      Entropy = 7.999979 bits per byte.
+
+      Optimum compression would reduce the size
+      of this 9000000 byte file by 0 percent.
+
+      Chi square distribution for 9000000 samples is 258.77, and randomly
+      would exceed this value 42.24 percent of the times.
+
+      Arithmetic mean value of data bytes is 127.5006 (127.5 = random).
+      Monte Carlo value for Pi is 3.141277333 (error 0.01 percent).
+      Serial correlation coefficient is 0.000468 (totally uncorrelated =
+      0.0).
+
+  This change was tested on a Nexus 5 phone (msm8974 SoC).
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48629.json
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11214'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11518'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11609'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11632'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11700'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11696'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11709'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11764'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11819'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12119'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12177'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12271'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11828'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11841'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12225'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11891'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13916'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13731'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13688'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13849'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13863'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13897'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13937'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13901'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13918'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13933'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13963'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13967'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.13939'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '0.00489'
+    scoring_system: epss
+    scoring_elements: '0.48396'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00552'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00553'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00549'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00554'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00548'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00393'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00395'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00544'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00545'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00546'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2022-48629
+weaknesses:
+  - CWE-99
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48629.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-48629
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48629
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/0f9b7b8df17525e464294c916acc8194ce38446b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/184f7bd08ce56f003530fc19f160d54e75bf5c9d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/485995cbc98a4f77cfd4f8ed4dd7ff8ab262964d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a680b1832ced3b5fa7c93484248fd221ea0d614b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a8e32bbb96c25b7ab29b1894dcd45e0b3b08fd9d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ab9337c7cb6f875b6286440b1adfbeeef2b2b2bd
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2267958
+    reference_type:
+    reference_id: 2267958
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc7:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc7:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.17:rc8:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.17:rc8:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2022-48629
+    reference_type:
+    reference_id: CVE-2022-48629

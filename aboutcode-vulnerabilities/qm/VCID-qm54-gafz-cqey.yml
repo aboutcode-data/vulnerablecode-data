@@ -1,0 +1,291 @@
+vulnerability_id: VCID-qm54-gafz-cqey
+aliases:
+  - CVE-2024-47813
+  - GHSA-7qmx-3fpx-r45m
+summary: 'Wasmtime is an open source runtime for WebAssembly. Under certain concurrent event
+  orderings, a `wasmtime::Engine`''s internal type registry was susceptible to double-unregistration
+  bugs due to a race condition, leading to panics and potentially type registry corruption.
+  That registry corruption could, following an additional and particular sequence of concurrent
+  events, lead to violations of WebAssembly''s control-flow integrity (CFI) and type safety.
+  Users that do not use `wasmtime::Engine` across multiple threads are not affected. Users that
+  only create new modules across threads over time are additionally not affected. Reproducing
+  this bug requires creating and dropping multiple type instances (such as `wasmtime::FuncType`
+  or `wasmtime::ArrayType`) concurrently on multiple threads, where all types are associated
+  with the same `wasmtime::Engine`. **Wasm guests cannot trigger this bug.** See the "References"
+  section below for a list of Wasmtime types-related APIs that are affected. Wasmtime maintains
+  an internal registry of types within a `wasmtime::Engine` and an engine is shareable across
+  threads. Types can be created and referenced through creation of a `wasmtime::Module`, creation
+  of `wasmtime::FuncType`, or a number of other APIs where the host creates a function (see
+  "References" below). Each of these cases interacts with an engine to deduplicate type information
+  and manage type indices that are used to implement type checks in WebAssembly''s `call_indirect`
+  function, for example. This bug is a race condition in this management where the internal
+  type registry could be corrupted to trigger an assert or contain invalid state. Wasmtime''s
+  internal representation of a type has individual types (e.g. one-per-host-function) maintain
+  a registration count of how many time it''s been used. Types additionally have state within
+  an engine behind a read-write lock such as lookup/deduplication information. The race here
+  is a time-of-check versus time-of-use (TOCTOU) bug where one thread atomically decrements
+  a type entry''s registration count, observes zero registrations, and then acquires a lock
+  in order to unregister that entry. However, between when this first thread observed the zero-registration
+  count and when it acquires that lock, another thread could perform the following sequence
+  of events: re-register another copy of the type, which deduplicates to that same entry, resurrecting
+  it and incrementing its registration count; then drop the type and decrement its registration
+  count; observe that the registration count is now zero; acquire the type registry lock; and
+  finally unregister the type. Now, when the original thread finally acquires the lock and unregisters
+  the entry, it is the second time this entry has been unregistered. This bug was originally
+  introduced in Wasmtime 19''s development of the WebAssembly GC proposal. This bug affects
+  users who are not using the GC proposal, however, and affects Wasmtime in its default configuration
+  even when the GC proposal is disabled. Wasmtime users using 19.0.0 and after are all affected
+  by this issue. We have released the following Wasmtime versions, all of which have a fix for
+  this bug: * 21.0.2 * 22.0.1 * 23.0.3 * 24.0.1 * 25.0.2. If your application creates and drops
+  Wasmtime types on multiple threads concurrently, there are no known workarounds. Users are
+  encouraged to upgrade to a patched release.'
+severities:
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05102'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05097'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05112'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05109'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05111'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05099'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05127'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05106'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05098'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05101'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.04066'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05085'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00029'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00223'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00224'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00222'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: 5e-05
+    scoring_system: epss
+    scoring_elements: '0.00225'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-7qmx-3fpx-r45m
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/commit/0ebe54d05f0e1f6c64b7c8bb48c9e9f6c95cacba
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/commit/0ebe54d05f0e1f6c64b7c8bb48c9e9f6c95cacba
+  - score: '2.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/pull/7969
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-10-09T19:43:41Z/
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/pull/7969
+  - score: '2.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-7qmx-3fpx-r45m
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-7qmx-3fpx-r45m
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2024-10-09T19:43:41Z/
+    published_at: None
+    url: https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-7qmx-3fpx-r45m
+weaknesses:
+  - CWE-367
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-47813
+    reference_type:
+    reference_id:
+  - url: https://github.com/bytecodealliance/wasmtime
+    reference_type:
+    reference_id:
+  - url: https://github.com/bytecodealliance/wasmtime/commit/0ebe54d05f0e1f6c64b7c8bb48c9e9f6c95cacba
+    reference_type:
+    reference_id:
+  - url: https://github.com/bytecodealliance/wasmtime/pull/7969
+    reference_type:
+    reference_id: 7969
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-47813
+    reference_type:
+    reference_id: CVE-2024-47813
+  - url: https://github.com/advisories/GHSA-7qmx-3fpx-r45m
+    reference_type:
+    reference_id: GHSA-7qmx-3fpx-r45m
+  - url: https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-7qmx-3fpx-r45m
+    reference_type:
+    reference_id: GHSA-7qmx-3fpx-r45m

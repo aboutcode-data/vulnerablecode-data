@@ -1,0 +1,363 @@
+vulnerability_id: VCID-n7uy-a52a-qudh
+aliases:
+  - CVE-2023-52894
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  usb: gadget: f_ncm: fix potential NULL ptr deref in ncm_bitrate()
+
+  In Google internal bug 265639009 we've received an (as yet) unreproducible
+  crash report from an aarch64 GKI 5.10.149-android13 running device.
+
+  AFAICT the source code is at:
+    https://android.googlesource.com/kernel/common/+/refs/tags/ASB-2022-12-05_13-5.10
+
+  The call stack is:
+    ncm_close() -> ncm_notify() -> ncm_do_notify()
+  with the crash at:
+    ncm_do_notify+0x98/0x270
+  Code: 79000d0b b9000a6c f940012a f9400269 (b9405d4b)
+
+  Which I believe disassembles to (I don't know ARM assembly, but it looks sane enough to me...):
+
+    // halfword (16-bit) store presumably to event->wLength (at offset 6 of struct usb_cdc_notification)
+    0B 0D 00 79    strh w11, [x8, #6]
+
+    // word (32-bit) store presumably to req->Length (at offset 8 of struct usb_request)
+    6C 0A 00 B9    str  w12, [x19, #8]
+
+    // x10 (NULL) was read here from offset 0 of valid pointer x9
+    // IMHO we're reading 'cdev->gadget' and getting NULL
+    // gadget is indeed at offset 0 of struct usb_composite_dev
+    2A 01 40 F9    ldr  x10, [x9]
+
+    // loading req->buf pointer, which is at offset 0 of struct usb_request
+    69 02 40 F9    ldr  x9, [x19]
+
+    // x10 is null, crash, appears to be attempt to read cdev->gadget->max_speed
+    4B 5D 40 B9    ldr  w11, [x10, #0x5c]
+
+  which seems to line up with ncm_do_notify() case NCM_NOTIFY_SPEED code fragment:
+
+    event->wLength = cpu_to_le16(8);
+    req->length = NCM_STATUS_BYTECOUNT;
+
+    /* SPEED_CHANGE data is up/down speeds in bits/sec */
+    data = req->buf + sizeof *event;
+    data[0] = cpu_to_le32(ncm_bitrate(cdev->gadget));
+
+  My analysis of registers and NULL ptr deref crash offset
+    (Unable to handle kernel NULL pointer dereference at virtual address 000000000000005c)
+  heavily suggests that the crash is due to 'cdev->gadget' being NULL when executing:
+    data[0] = cpu_to_le32(ncm_bitrate(cdev->gadget));
+  which calls:
+    ncm_bitrate(NULL)
+  which then calls:
+    gadget_is_superspeed(NULL)
+  which reads
+    ((struct usb_gadget *)NULL)->max_speed
+  and hits a panic.
+
+  AFAICT, if I'm counting right, the offset of max_speed is indeed 0x5C.
+  (remember there's a GKI KABI reservation of 16 bytes in struct work_struct)
+
+  It's not at all clear to me how this is all supposed to work...
+  but returning 0 seems much better than panic-ing...
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52894.json
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07118'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06941'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06948'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06945'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06953'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06991'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07007'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07029'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07042'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07027'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06933'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06901'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07111'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07057'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05124'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05115'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05119'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05108'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05100'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05073'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05058'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14556'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14561'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14531'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.1451'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14465'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14517'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14499'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.1449'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14506'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14526'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14491'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14471'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14461'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14302'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00056'
+    scoring_system: epss
+    scoring_elements: '0.14351'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '0.00236'
+    scoring_system: epss
+    scoring_elements: '0.3161'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-52894
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-52894
+weaknesses:
+  - CWE-476
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52894.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52894
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-52894
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/09e4507ec8ef2d44da6ba4092b8ee2d81f216497
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/63d161f29cd39c050e8873aa36e0c9fc013bb763
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a21da7f7aae618c785f7e4a275d43c06dc8412b6
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a69c8dfb85b44be9cc223be07d35cc3a9baefbea
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c6ec929595c7443250b2a4faea988c62019d5cd2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e92c70059178da751e5af7de02384b7dfadb5ec7
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/fef6b29671b66dfb71f17e337c1ad14b5a2cedae
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2306422
+    reference_type:
+    reference_id: 2306422
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.2:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.2:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.2:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.2:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.2:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.2:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.2:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.2:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52894
+    reference_type:
+    reference_id: CVE-2023-52894

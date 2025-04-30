@@ -1,0 +1,406 @@
+vulnerability_id: VCID-1uc7-6prk-aaar
+aliases:
+  - CVE-2021-46939
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  tracing: Restructure trace_clock_global() to never block
+
+  It was reported that a fix to the ring buffer recursion detection would
+  cause a hung machine when performing suspend / resume testing. The
+  following backtrace was extracted from debugging that case:
+
+  Call Trace:
+   trace_clock_global+0x91/0xa0
+   __rb_reserve_next+0x237/0x460
+   ring_buffer_lock_reserve+0x12a/0x3f0
+   trace_buffer_lock_reserve+0x10/0x50
+   __trace_graph_return+0x1f/0x80
+   trace_graph_return+0xb7/0xf0
+   ? trace_clock_global+0x91/0xa0
+   ftrace_return_to_handler+0x8b/0xf0
+   ? pv_hash+0xa0/0xa0
+   return_to_handler+0x15/0x30
+   ? ftrace_graph_caller+0xa0/0xa0
+   ? trace_clock_global+0x91/0xa0
+   ? __rb_reserve_next+0x237/0x460
+   ? ring_buffer_lock_reserve+0x12a/0x3f0
+   ? trace_event_buffer_lock_reserve+0x3c/0x120
+   ? trace_event_buffer_reserve+0x6b/0xc0
+   ? trace_event_raw_event_device_pm_callback_start+0x125/0x2d0
+   ? dpm_run_callback+0x3b/0xc0
+   ? pm_ops_is_empty+0x50/0x50
+   ? platform_get_irq_byname_optional+0x90/0x90
+   ? trace_device_pm_callback_start+0x82/0xd0
+   ? dpm_run_callback+0x49/0xc0
+
+  With the following RIP:
+
+  RIP: 0010:native_queued_spin_lock_slowpath+0x69/0x200
+
+  Since the fix to the recursion detection would allow a single recursion to
+  happen while tracing, this lead to the trace_clock_global() taking a spin
+  lock and then trying to take it again:
+
+  ring_buffer_lock_reserve() {
+    trace_clock_global() {
+      arch_spin_lock() {
+        queued_spin_lock_slowpath() {
+          /* lock taken */
+          (something else gets traced by function graph tracer)
+            ring_buffer_lock_reserve() {
+              trace_clock_global() {
+                arch_spin_lock() {
+                  queued_spin_lock_slowpath() {
+                  /* DEAD LOCK! */
+
+  Tracing should *never* block, as it can lead to strange lockups like the
+  above.
+
+  Restructure the trace_clock_global() code to instead of simply taking a
+  lock to update the recorded "prev_time" simply use it, as two events
+  happening on two different CPUs that calls this at the same time, really
+  doesn't matter which one goes first. Use a trylock to grab the lock for
+  updating the prev_time, and if it fails, simply try again the next time.
+  If it failed to be taken, that means something else is already updating
+  it.
+
+
+  Bugzilla: https://bugzilla.kernel.org/show_bug.cgi?id=212761
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46939.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05124'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05115'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05119'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05108'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05100'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05073'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05058'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.11'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.11077'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.11042'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.10923'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.11007'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.1088'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '0.00204'
+    scoring_system: epss
+    scoring_elements: '0.28481'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00413'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00311'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00312'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00313'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00306'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0041'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00409'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00411'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00414'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00408'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00407'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00329'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/1fca00920327be96f3318224f502e4d5460f9545
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/1fca00920327be96f3318224f502e4d5460f9545
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/2a1bd74b8186d7938bf004f5603f25b84785f63e
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/2a1bd74b8186d7938bf004f5603f25b84785f63e
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/6e2418576228eeb12e7ba82edb8f9500623942ff
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/6e2418576228eeb12e7ba82edb8f9500623942ff
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/859b47a43f5a0e5b9a92b621dc6ceaad39fb5c8b
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/859b47a43f5a0e5b9a92b621dc6ceaad39fb5c8b
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/91ca6f6a91f679c8645d7f3307e03ce86ad518c4
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/91ca6f6a91f679c8645d7f3307e03ce86ad518c4
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/a33614d52e97fc8077eb0b292189ca7d964cc534
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/a33614d52e97fc8077eb0b292189ca7d964cc534
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/aafe104aa9096827a429bc1358f8260ee565b7cc
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/aafe104aa9096827a429bc1358f8260ee565b7cc
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/c64da3294a7d59a4bf6874c664c13be892f15f44
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/c64da3294a7d59a4bf6874c664c13be892f15f44
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/d43d56dbf452ccecc1ec735cd4b6840118005d7c
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-04-22T16:06:58Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/d43d56dbf452ccecc1ec735cd4b6840118005d7c
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46939
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46939
+weaknesses:
+  - CWE-662
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46939.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-46939
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-46939
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/1fca00920327be96f3318224f502e4d5460f9545
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2a1bd74b8186d7938bf004f5603f25b84785f63e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/6e2418576228eeb12e7ba82edb8f9500623942ff
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/859b47a43f5a0e5b9a92b621dc6ceaad39fb5c8b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/91ca6f6a91f679c8645d7f3307e03ce86ad518c4
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a33614d52e97fc8077eb0b292189ca7d964cc534
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/aafe104aa9096827a429bc1358f8260ee565b7cc
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c64da3294a7d59a4bf6874c664c13be892f15f44
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d43d56dbf452ccecc1ec735cd4b6840118005d7c
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2266497
+    reference_type:
+    reference_id: 2266497
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-46939
+    reference_type:
+    reference_id: CVE-2021-46939
+  - url: https://access.redhat.com/errata/RHSA-2024:5101
+    reference_type:
+    reference_id: RHSA-2024:5101
+  - url: https://access.redhat.com/errata/RHSA-2024:5102
+    reference_type:
+    reference_id: RHSA-2024:5102
+  - url: https://usn.ubuntu.com/6778-1/
+    reference_type:
+    reference_id: USN-6778-1

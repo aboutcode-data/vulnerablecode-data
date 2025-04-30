@@ -1,0 +1,133 @@
+vulnerability_id: VCID-8hnq-t3hm-zkbv
+aliases:
+  - CVE-2025-23133
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  wifi: ath11k: update channel list in reg notifier instead reg worker
+
+  Currently when ath11k gets a new channel list, it will be processed
+  according to the following steps:
+  1. update new channel list to cfg80211 and queue reg_work.
+  2. cfg80211 handles new channel list during reg_work.
+  3. update cfg80211's handled channel list to firmware by
+  ath11k_reg_update_chan_list().
+
+  But ath11k will immediately execute step 3 after reg_work is just
+  queued. Since step 2 is asynchronous, cfg80211 may not have completed
+  handling the new channel list, which may leading to an out-of-bounds
+  write error:
+  BUG: KASAN: slab-out-of-bounds in ath11k_reg_update_chan_list
+  Call Trace:
+      ath11k_reg_update_chan_list+0xbfe/0xfe0 [ath11k]
+      kfree+0x109/0x3a0
+      ath11k_regd_update+0x1cf/0x350 [ath11k]
+      ath11k_regd_update_work+0x14/0x20 [ath11k]
+      process_one_work+0xe35/0x14c0
+
+  Should ensure step 2 is completely done before executing step 3. Thus
+  Wen raised patch[1]. When flag NL80211_REGDOM_SET_BY_DRIVER is set,
+  cfg80211 will notify ath11k after step 2 is done.
+
+  So enable the flag NL80211_REGDOM_SET_BY_DRIVER then cfg80211 will
+  notify ath11k after step 2 is done. At this time, there will be no
+  KASAN bug during the execution of the step 3.
+
+  [1] https://patchwork.kernel.org/project/linux-wireless/patch/20230201065313.27203-1-quic_wgong@quicinc.com/
+
+  Tested-on: WCN6855 hw2.0 PCI WLAN.HSP.1.1-03125-QCAHSPSWPL_V1_V2_SILICONZ_LITE-3
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-23133.json
+  - score: '6.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-23133.json
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.03546'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.03523'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.03536'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.0352'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05278'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05241'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05259'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.0525'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05264'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05268'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05284'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-125
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-23133.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-23133
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/933ab187e679e6fbdeea1835ae39efcc59c022d2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f952fb83c9c6f908d27500764c4aee1df04b9d3f
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360279
+    reference_type:
+    reference_id: 2360279
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-23133
+    reference_type:
+    reference_id: CVE-2025-23133
