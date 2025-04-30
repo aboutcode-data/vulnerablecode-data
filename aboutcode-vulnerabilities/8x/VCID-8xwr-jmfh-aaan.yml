@@ -1,0 +1,361 @@
+vulnerability_id: VCID-8xwr-jmfh-aaan
+aliases:
+  - CVE-2024-26941
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  drm/dp: Fix divide-by-zero regression on DP MST unplug with nouveau
+
+  Fix a regression when using nouveau and unplugging a StarTech MSTDP122DP
+  DisplayPort 1.2 MST hub (the same regression does not appear when using
+  a Cable Matters DisplayPort 1.4 MST hub). Trace:
+
+   divide error: 0000 [#1] PREEMPT SMP PTI
+   CPU: 7 PID: 2962 Comm: Xorg Not tainted 6.8.0-rc3+ #744
+   Hardware name: Razer Blade/DANA_MB, BIOS 01.01 08/31/2018
+   RIP: 0010:drm_dp_bw_overhead+0xb4/0x110 [drm_display_helper]
+   Code: c6 b8 01 00 00 00 75 61 01 c6 41 0f af f3 41 0f af f1 c1 e1 04 48 63 c7 31 d2 89 ff 48 8b 5d f8 c9 48 0f af f1 48 8d 44 06 ff <48> f7 f7 31 d2 31 c9 31 f6 31 ff 45 31 c0 45 31 c9 45 31 d2 45 31
+   RSP: 0018:ffffb2c5c211fa30 EFLAGS: 00010206
+   RAX: ffffffffffffffff RBX: 0000000000000000 RCX: 0000000000f59b00
+   RDX: 0000000000000000 RSI: 0000000000000000 RDI: 0000000000000000
+   RBP: ffffb2c5c211fa48 R08: 0000000000000001 R09: 0000000000000020
+   R10: 0000000000000004 R11: 0000000000000000 R12: 0000000000023b4a
+   R13: ffff91d37d165800 R14: ffff91d36fac6d80 R15: ffff91d34a764010
+   FS:  00007f4a1ca3fa80(0000) GS:ffff91d6edbc0000(0000) knlGS:0000000000000000
+   CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+   CR2: 0000559491d49000 CR3: 000000011d180002 CR4: 00000000003706f0
+   Call Trace:
+    <TASK>
+    ? show_regs+0x6d/0x80
+    ? die+0x37/0xa0
+    ? do_trap+0xd4/0xf0
+    ? do_error_trap+0x71/0xb0
+    ? drm_dp_bw_overhead+0xb4/0x110 [drm_display_helper]
+    ? exc_divide_error+0x3a/0x70
+    ? drm_dp_bw_overhead+0xb4/0x110 [drm_display_helper]
+    ? asm_exc_divide_error+0x1b/0x20
+    ? drm_dp_bw_overhead+0xb4/0x110 [drm_display_helper]
+    ? drm_dp_calc_pbn_mode+0x2e/0x70 [drm_display_helper]
+    nv50_msto_atomic_check+0xda/0x120 [nouveau]
+    drm_atomic_helper_check_modeset+0xa87/0xdf0 [drm_kms_helper]
+    drm_atomic_helper_check+0x19/0xa0 [drm_kms_helper]
+    nv50_disp_atomic_check+0x13f/0x2f0 [nouveau]
+    drm_atomic_check_only+0x668/0xb20 [drm]
+    ? drm_connector_list_iter_next+0x86/0xc0 [drm]
+    drm_atomic_commit+0x58/0xd0 [drm]
+    ? __pfx___drm_printfn_info+0x10/0x10 [drm]
+    drm_atomic_connector_commit_dpms+0xd7/0x100 [drm]
+    drm_mode_obj_set_property_ioctl+0x1c5/0x450 [drm]
+    ? __pfx_drm_connector_property_set_ioctl+0x10/0x10 [drm]
+    drm_connector_property_set_ioctl+0x3b/0x60 [drm]
+    drm_ioctl_kernel+0xb9/0x120 [drm]
+    drm_ioctl+0x2d0/0x550 [drm]
+    ? __pfx_drm_connector_property_set_ioctl+0x10/0x10 [drm]
+    nouveau_drm_ioctl+0x61/0xc0 [nouveau]
+    __x64_sys_ioctl+0xa0/0xf0
+    do_syscall_64+0x76/0x140
+    ? do_syscall_64+0x85/0x140
+    ? do_syscall_64+0x85/0x140
+    entry_SYSCALL_64_after_hwframe+0x6e/0x76
+   RIP: 0033:0x7f4a1cd1a94f
+   Code: 00 48 89 44 24 18 31 c0 48 8d 44 24 60 c7 04 24 10 00 00 00 48 89 44 24 08 48 8d 44 24 20 48 89 44 24 10 b8 10 00 00 00 0f 05 <41> 89 c0 3d 00 f0 ff ff 77 1f 48 8b 44 24 18 64 48 2b 04 25 28 00
+   RSP: 002b:00007ffd2f1df520 EFLAGS: 00000246 ORIG_RAX: 0000000000000010
+   RAX: ffffffffffffffda RBX: 00007ffd2f1df5b0 RCX: 00007f4a1cd1a94f
+   RDX: 00007ffd2f1df5b0 RSI: 00000000c01064ab RDI: 000000000000000f
+   RBP: 00000000c01064ab R08: 000056347932deb8 R09: 000056347a7d99c0
+   R10: 0000000000000000 R11: 0000000000000246 R12: 000056347938a220
+   R13: 000000000000000f R14: 0000563479d9f3f0 R15: 0000000000000000
+    </TASK>
+   Modules linked in: rfcomm xt_conntrack nft_chain_nat xt_MASQUERADE nf_nat nf_conntrack_netlink nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 xfrm_user xfrm_algo xt_addrtype nft_compat nf_tables nfnetlink br_netfilter bridge stp llc ccm cmac algif_hash overlay algif_skcipher af_alg bnep binfmt_misc snd_sof_pci_intel_cnl snd_sof_intel_hda_common snd_soc_hdac_hda snd_sof_pci snd_sof_xtensa_dsp snd_sof_intel_hda snd_sof snd_sof_utils snd_soc_acpi_intel_match snd_soc_acpi snd_soc_core snd_compress snd_sof_intel_hda_mlink snd_hda_ext_core iwlmvm intel_rapl_msr intel_rapl_common intel_tcc_cooling x86_pkg_temp_thermal intel_powerclamp mac80211 coretemp kvm_intel snd_hda_codec_hdmi kvm snd_hda_
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26941.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14215'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14067'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14128'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14222'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14306'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14307'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14275'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14242'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14233'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14213'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14221'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14241'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14246'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14234'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17279'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17252'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17228'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17198'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17233'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17249'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17275'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17125'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17072'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17224'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17244'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17277'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17296'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.1727'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00065'
+    scoring_system: epss
+    scoring_elements: '0.17254'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '0.00283'
+    scoring_system: epss
+    scoring_elements: '0.35635'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-26941
+weaknesses:
+  - CWE-369
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-26941.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-26941
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/828862071a6ca0c52655e6e62ac7abfef3e5c578
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9cbd1dae842737bfafa4b10a87909fa209dde250
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2278216
+    reference_type:
+    reference_id: 2278216
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.9:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.9:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-26941
+    reference_type:
+    reference_id: CVE-2024-26941
+  - url: https://usn.ubuntu.com/6816-1/
+    reference_type:
+    reference_id: USN-6816-1
+  - url: https://usn.ubuntu.com/6817-1/
+    reference_type:
+    reference_id: USN-6817-1
+  - url: https://usn.ubuntu.com/6817-2/
+    reference_type:
+    reference_id: USN-6817-2
+  - url: https://usn.ubuntu.com/6817-3/
+    reference_type:
+    reference_id: USN-6817-3
+  - url: https://usn.ubuntu.com/6878-1/
+    reference_type:
+    reference_id: USN-6878-1

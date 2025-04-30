@@ -1,0 +1,752 @@
+vulnerability_id: VCID-bewd-ccmm-aaar
+aliases:
+  - CVE-2024-38601
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nring-buffer:\
+  \ Fix a race between readers and resize checks\n\nThe reader code in rb_get_reader_page()\
+  \ swaps a new reader page into the\nring buffer by doing cmpxchg on old->list.prev->next to\
+  \ point it to the\nnew page. Following that, if the operation is successful,\nold->list.next->prev\
+  \ gets updated too. This means the underlying\ndoubly-linked list is temporarily inconsistent,\
+  \ page->prev->next or\npage->next->prev might not be equal back to page for some page in the\n\
+  ring buffer.\n\nThe resize operation in ring_buffer_resize() can be invoked in parallel.\n\
+  It calls rb_check_pages() which can detect the described inconsistency\nand stop further tracing:\n\
+  \n[  190.271762] ------------[ cut here ]------------\n[  190.271771] WARNING: CPU: 1 PID:\
+  \ 6186 at kernel/trace/ring_buffer.c:1467 rb_check_pages.isra.0+0x6a/0xa0\n[  190.271789]\
+  \ Modules linked in: [...]\n[  190.271991] Unloaded tainted modules: intel_uncore_frequency(E):1\
+  \ skx_edac(E):1\n[  190.272002] CPU: 1 PID: 6186 Comm: cmd.sh Kdump: loaded Tainted: G   \
+  \         E      6.9.0-rc6-default #5 158d3e1e6d0b091c34c3b96bfd99a1c58306d79f\n[  190.272011]\
+  \ Hardware name: QEMU Standard PC (Q35 + ICH9, 2009), BIOS rel-1.16.0-0-gd239552c-rebuilt.opensuse.org\
+  \ 04/01/2014\n[  190.272015] RIP: 0010:rb_check_pages.isra.0+0x6a/0xa0\n[  190.272023] Code:\
+  \ [...]\n[  190.272028] RSP: 0018:ffff9c37463abb70 EFLAGS: 00010206\n[  190.272034] RAX: ffff8eba04b6cb80\
+  \ RBX: 0000000000000007 RCX: ffff8eba01f13d80\n[  190.272038] RDX: ffff8eba01f130c0 RSI: ffff8eba04b6cd00\
+  \ RDI: ffff8eba0004c700\n[  190.272042] RBP: ffff8eba0004c700 R08: 0000000000010002 R09: 0000000000000000\n\
+  [  190.272045] R10: 00000000ffff7f52 R11: ffff8eba7f600000 R12: ffff8eba0004c720\n[  190.272049]\
+  \ R13: ffff8eba00223a00 R14: 0000000000000008 R15: ffff8eba067a8000\n[  190.272053] FS:  00007f1bd64752c0(0000)\
+  \ GS:ffff8eba7f680000(0000) knlGS:0000000000000000\n[  190.272057] CS:  0010 DS: 0000 ES:\
+  \ 0000 CR0: 0000000080050033\n[  190.272061] CR2: 00007f1bd6662590 CR3: 000000010291e001 CR4:\
+  \ 0000000000370ef0\n[  190.272070] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000\n\
+  [  190.272073] DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400\n[  190.272077]\
+  \ Call Trace:\n[  190.272098]  <TASK>\n[  190.272189]  ring_buffer_resize+0x2ab/0x460\n[ \
+  \ 190.272199]  __tracing_resize_ring_buffer.part.0+0x23/0xa0\n[  190.272206]  tracing_resize_ring_buffer+0x65/0x90\n\
+  [  190.272216]  tracing_entries_write+0x74/0xc0\n[  190.272225]  vfs_write+0xf5/0x420\n[ \
+  \ 190.272248]  ksys_write+0x67/0xe0\n[  190.272256]  do_syscall_64+0x82/0x170\n[  190.272363]\
+  \  entry_SYSCALL_64_after_hwframe+0x76/0x7e\n[  190.272373] RIP: 0033:0x7f1bd657d263\n[  190.272381]\
+  \ Code: [...]\n[  190.272385] RSP: 002b:00007ffe72b643f8 EFLAGS: 00000246 ORIG_RAX: 0000000000000001\n\
+  [  190.272391] RAX: ffffffffffffffda RBX: 0000000000000002 RCX: 00007f1bd657d263\n[  190.272395]\
+  \ RDX: 0000000000000002 RSI: 0000555a6eb538e0 RDI: 0000000000000001\n[  190.272398] RBP: 0000555a6eb538e0\
+  \ R08: 000000000000000a R09: 0000000000000000\n[  190.272401] R10: 0000555a6eb55190 R11: 0000000000000246\
+  \ R12: 00007f1bd6662500\n[  190.272404] R13: 0000000000000002 R14: 00007f1bd6667c00 R15: 0000000000000002\n\
+  [  190.272412]  </TASK>\n[  190.272414] ---[ end trace 0000000000000000 ]---\n\nNote that\
+  \ ring_buffer_resize() calls rb_check_pages() only if the parent\ntrace_buffer has recording\
+  \ disabled. Recent commit d78ab792705c\n(\"tracing: Stop current tracer when resizing buffer\"\
+  ) causes that it is\nnow always the case which makes it more likely to experience this issue.\n\
+  \nThe window to hit this race is nonetheless very small. To help\nreproducing it, one can\
+  \ add a delay loop in rb_get_reader_page():\n\n ret = rb_head_page_replace(reader, cpu_buffer->reader_page);\n\
+  \ if (!ret)\n \tgoto spin;\n for (unsigned i = 0; i < 1U << 26; i++)  /* inserted delay loop\
+  \ */\n \t__asm__ __volatile__ (\"\" : : : \"memory\");\n rb_list_head(reader->list.next)->prev\
+  \ = &cpu_buffer->reader_page->list;\n\n.. \n---truncated---"
+severities:
+  - score: '4.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-38601.json
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14083'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14371'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14461'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14482'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14548'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14541'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14556'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14611'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14691'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14976'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15033'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15128'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14714'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14726'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15080'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14767'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0035'
+    scoring_system: epss
+    scoring_elements: '0.54568'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0035'
+    scoring_system: epss
+    scoring_elements: '0.54478'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0035'
+    scoring_system: epss
+    scoring_elements: '0.54462'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0035'
+    scoring_system: epss
+    scoring_elements: '0.54562'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0035'
+    scoring_system: epss
+    scoring_elements: '0.54588'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54654'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54636'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54619'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54637'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54657'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54677'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54691'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54679'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00351'
+    scoring_system: epss
+    scoring_elements: '0.54669'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58943'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58958'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58949'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58953'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58864'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58902'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58946'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58972'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58987'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.5894'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58941'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.00389'
+    scoring_system: epss
+    scoring_elements: '0.58956'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '0.0108'
+    scoring_system: epss
+    scoring_elements: '0.64502'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+  - score: '4.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-362
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-38601.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-38601
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-43945
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48772
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-25741
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-26629
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-27019
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-31076
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-33621
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-33847
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-34027
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-35247
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36014
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36015
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36016
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36270
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36286
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36288
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36489
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36894
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36971
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36974
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-36978
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-37078
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-37353
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-37356
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38381
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38546
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38547
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38548
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38549
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38552
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38555
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38558
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38559
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38560
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38565
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38567
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38578
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38579
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38582
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38583
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38586
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38587
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38589
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38590
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38596
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38597
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38598
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38599
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38601
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38605
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38607
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38612
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38613
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38615
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38618
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38619
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38621
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38627
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38633
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38634
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38635
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38637
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38659
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38661
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38662
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-38780
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39276
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39292
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39301
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39467
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39468
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39469
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39471
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39475
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39476
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39480
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39482
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39484
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39488
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39489
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39493
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39495
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39499
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39501
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39502
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39503
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39505
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39506
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-39509
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40901
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40902
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40904
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40905
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40912
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40916
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40929
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40931
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40932
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40934
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40941
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40942
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40943
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40945
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40958
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40959
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40960
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40961
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40963
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40968
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40971
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40974
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40976
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40978
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40980
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40981
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40983
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40984
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40987
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40988
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40990
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40993
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40995
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-41000
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-41004
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-41005
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-41006
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/1e160196042cac946798ac192a0bc3398f1aa66b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/54c64967ba5f8658ae7da76005024ebd3d9d8f6e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/595363182f28786d641666a09e674b852c83b4bb
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5ef9e330406d3fb4f4b2c8bca2c6b8a93bae32d1
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/79b52013429a42b8efdb0cda8bb0041386abab87
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/af3274905b3143ea23142bbf77bd9b610c54e533
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b50932ea673b5a089a4bb570a8a868d95c72854e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c2274b908db05529980ec056359fae916939fdaa
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c68b7a442ee61d04ca58b2b5cb5ea7cb8230f84a
+    reference_type:
+    reference_id:
+  - url: https://lists.debian.org/debian-lts-announce/2024/06/msg00020.html
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2293364
+    reference_type:
+    reference_id: 2293364
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-38601
+    reference_type:
+    reference_id: CVE-2024-38601
+  - url: https://access.redhat.com/errata/RHSA-2024:6997
+    reference_type:
+    reference_id: RHSA-2024:6997
+  - url: https://usn.ubuntu.com/6949-1/
+    reference_type:
+    reference_id: USN-6949-1
+  - url: https://usn.ubuntu.com/6949-2/
+    reference_type:
+    reference_id: USN-6949-2
+  - url: https://usn.ubuntu.com/6951-1/
+    reference_type:
+    reference_id: USN-6951-1
+  - url: https://usn.ubuntu.com/6951-2/
+    reference_type:
+    reference_id: USN-6951-2
+  - url: https://usn.ubuntu.com/6951-3/
+    reference_type:
+    reference_id: USN-6951-3
+  - url: https://usn.ubuntu.com/6951-4/
+    reference_type:
+    reference_id: USN-6951-4
+  - url: https://usn.ubuntu.com/6952-1/
+    reference_type:
+    reference_id: USN-6952-1
+  - url: https://usn.ubuntu.com/6952-2/
+    reference_type:
+    reference_id: USN-6952-2
+  - url: https://usn.ubuntu.com/6953-1/
+    reference_type:
+    reference_id: USN-6953-1
+  - url: https://usn.ubuntu.com/6955-1/
+    reference_type:
+    reference_id: USN-6955-1
+  - url: https://usn.ubuntu.com/6979-1/
+    reference_type:
+    reference_id: USN-6979-1
+  - url: https://usn.ubuntu.com/7007-1/
+    reference_type:
+    reference_id: USN-7007-1
+  - url: https://usn.ubuntu.com/7007-2/
+    reference_type:
+    reference_id: USN-7007-2
+  - url: https://usn.ubuntu.com/7007-3/
+    reference_type:
+    reference_id: USN-7007-3
+  - url: https://usn.ubuntu.com/7009-1/
+    reference_type:
+    reference_id: USN-7009-1
+  - url: https://usn.ubuntu.com/7009-2/
+    reference_type:
+    reference_id: USN-7009-2
+  - url: https://usn.ubuntu.com/7019-1/
+    reference_type:
+    reference_id: USN-7019-1

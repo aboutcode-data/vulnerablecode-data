@@ -1,0 +1,406 @@
+vulnerability_id: VCID-54j9-8rw2-aaap
+aliases:
+  - CVE-2024-34349
+  - GHSA-v2f9-rv6w-vw8r
+summary: "Sylius potentially vulnerable to Cross Site Scripting via \"Name\" field (Taxons,\
+  \ Products, Options, Variants) in Admin Panel\n### Impact\n\nThere is a possibility to execute\
+  \ javascript code in the Admin panel. In order to perform an XSS attack input a script into\
+  \ `Name` field in which of the resources: Taxons, Products, Product Options or Product Variants.\
+  \ The code will be executed while using an autocomplete field with one of the listed entities\
+  \ in the Admin Panel. Also for the taxons in the category tree on the product form. \n\n###\
+  \ Patches\nThe issue is fixed in versions: 1.12.16, 1.13.1 and above.\n\n### Workarounds\n\
+  \n1. Create new file `assets/admin/sylius-lazy-choice-tree.js`:\n\n```js\n// assets/admin/sylius-lazy-choice-tree.js\n\
+  \nfunction sanitizeInput(input) {\n  const div = document.createElement('div');\n  div.textContent\
+  \ = input;\n  return div.innerHTML; // Converts text content to plain HTML, stripping any\
+  \ scripts\n}\n\nconst createRootContainer = function createRootContainer() {\n  return $('<div\
+  \ class=\"ui list\"></div>');\n};\n\nconst createLeafContainerElement = function createLeafContainerElement()\
+  \ {\n  return $('<div class=\"list\"></div>');\n};\n\nconst createLeafIconElement = function\
+  \ createLeafIconElement() {\n  return $('<i class=\"folder icon\"></i>');\n};\n\nconst createLeafTitleElement\
+  \ = function createLeafTitleElement() {\n  return $('<div class=\"header\"></div>');\n};\n\
+  \nconst createLeafTitleSpan = function createLeafTitleSpan(displayName) {\n  return $(`<span\
+  \ style=\"margin-right: 5px; cursor: pointer;\">${displayName}</span>`);\n};\n\nconst createLeafContentElement\
+  \ = function createLeafContentElement() {\n  return $('<div class=\"content\"></div>');\n\
+  };\n\n$.fn.extend({\n  choiceTree(type, multiple, defaultLevel) {\n    const tree = this;\n\
+  \    const loader = tree.find('.dimmer');\n    const loadedLeafs = [];\n    const $input =\
+  \ tree.find('input[type=\"hidden\"]');\n\n    const createCheckboxElement = function createCheckboxElement(name,\
+  \ code, multi) {\n      const chosenNodes = $input.val().split(',');\n      let checked =\
+  \ '';\n      if (chosenNodes.some(chosenCode => chosenCode === code)) {\n        checked =\
+  \ 'checked=\"checked\"';\n      }\n      if (multi) {\n        return $(`<div class=\"ui checkbox\"\
+  \ data-value=\"${code}\"><input ${checked} type=\"checkbox\" name=\"${type}\"></div>`);\n\
+  \      }\n\n      return $(`<div class=\"ui radio checkbox\" data-value=\"${code}\"><input\
+  \ ${checked} type=\"radio\" name=\"${type}\"></div>`);\n    };\n\n    const isLeafLoaded =\
+  \ function isLeafLoaded(code) {\n      return loadedLeafs.some(leafCode => leafCode === code);\n\
+  \    };\n\n    let createLeafFunc;\n\n    const loadLeafAction = function loadLeafAction(parentCode,\
+  \ expandButton, content, icon, leafContainerElement) {\n      icon.toggleClass('open');\n\n\
+  \      if (!isLeafLoaded(parentCode)) {\n        expandButton.api({\n          on: 'now',\n\
+  \          url: tree.data('tree-leafs-url') || tree.data('taxon-leafs-url'),\n          method:\
+  \ 'GET',\n          cache: false,\n          data: {\n            parentCode,\n          },\n\
+  \          beforeSend(settings) {\n            loader.addClass('active');\n\n            return\
+  \ settings;\n          },\n          onSuccess(response) {\n            response.forEach((leafNode)\
+  \ => {\n              leafContainerElement.append((\n                createLeafFunc(sanitizeInput(leafNode.name),\
+  \ leafNode.code, leafNode.hasChildren, multiple, leafNode.level)\n              ));\n    \
+  \        });\n            content.append(leafContainerElement);\n            loader.removeClass('active');\n\
+  \            loadedLeafs.push(parentCode);\n\n            leafContainerElement.toggle();\n\
+  \          },\n        });\n      }\n\n      leafContainerElement.toggle();\n    };\n\n  \
+  \  const bindExpandLeafAction = function bindExpandLeafAction(parentCode, expandButton, content,\
+  \ icon, level) {\n      const leafContainerElement = createLeafContainerElement();\n     \
+  \ if (defaultLevel > level) {\n        loadLeafAction(parentCode, expandButton, content, icon,\
+  \ leafContainerElement);\n      }\n\n      expandButton.click(() => {\n        loadLeafAction(parentCode,\
+  \ expandButton, content, icon, leafContainerElement);\n      });\n    };\n\n    const bindCheckboxAction\
+  \ = function bindCheckboxAction(checkboxElement) {\n      checkboxElement.checkbox({\n   \
+  \     onChecked() {\n          const { value } = checkboxElement[0].dataset;\n          const\
+  \ checkedValues = $input.val().split(',').filter(Boolean);\n          checkedValues.push(value);\n\
+  \          $input.val(checkedValues.join());\n        },\n        onUnchecked() {\n      \
+  \    const { value } = checkboxElement[0].dataset;\n          const checkedValues = $input.val().split(',').filter(Boolean);\n\
+  \          const i = checkedValues.indexOf(value);\n          if (i !== -1) {\n          \
+  \  checkedValues.splice(i, 1);\n          }\n          $input.val(checkedValues.join());\n\
+  \        },\n      });\n    };\n\n    const createLeaf = function createLeaf(name, code, hasChildren,\
+  \ multipleChoice, level) {\n      const displayNameElement = createLeafTitleSpan(name);\n\
+  \      const titleElement = createLeafTitleElement();\n      const iconElement = createLeafIconElement();\n\
+  \      const checkboxElement = createCheckboxElement(name, code, multipleChoice);\n\n    \
+  \  bindCheckboxAction(checkboxElement);\n\n      const leafElement = $('<div class=\"item\"\
+  ></div>');\n      const leafContentElement = createLeafContentElement();\n\n      leafElement.append(iconElement);\n\
+  \      titleElement.append(displayNameElement);\n      titleElement.append(checkboxElement);\n\
+  \      leafContentElement.append(titleElement);\n\n      if (!hasChildren) {\n        iconElement.addClass('outline');\n\
+  \      }\n      if (hasChildren) {\n        bindExpandLeafAction(code, displayNameElement,\
+  \ leafContentElement, iconElement, level);\n      }\n      leafElement.append(leafContentElement);\n\
+  \n      return leafElement;\n    };\n    createLeafFunc = createLeaf;\n\n    tree.api({\n\
+  \      on: 'now',\n      method: 'GET',\n      url: tree.data('tree-root-nodes-url') || tree.data('taxon-root-nodes-url'),\n\
+  \      cache: false,\n      beforeSend(settings) {\n        loader.addClass('active');\n\n\
+  \        return settings;\n      },\n      onSuccess(response) {\n        const rootContainer\
+  \ = createRootContainer();\n        response.forEach((rootNode) => {\n          rootContainer.append((\n\
+  \            createLeaf(sanitizeInput(rootNode.name), rootNode.code, rootNode.hasChildren,\
+  \ multiple, rootNode.level)\n          ));\n        });\n        tree.append(rootContainer);\n\
+  \        loader.removeClass('active');\n      },\n    });\n  },\n});\n```\n\n2. Create new\
+  \ file `assets/admin/sylius-auto-complete.js`:\n\n```js\n// assets/admin/sylius-auto-complete.js\n\
+  \nfunction sanitizeInput(input) {\n  const div = document.createElement('div');\n  div.textContent\
+  \ = input;\n  return div.innerHTML; // Converts text content to plain HTML, stripping any\
+  \ scripts\n}\n\n$.fn.extend({\n  autoComplete() {\n    this.each((idx, el) => {\n      const\
+  \ element = $(el);\n      const criteriaName = element.data('criteria-name');\n      const\
+  \ choiceName = element.data('choice-name');\n      const choiceValue = element.data('choice-value');\n\
+  \      const autocompleteValue = element.find('input.autocomplete').val();\n      const loadForEditUrl\
+  \ = element.data('load-edit-url');\n\n      element.dropdown({\n        delay: {\n       \
+  \   search: 250,\n        },\n        forceSelection: false,\n        saveRemoteData: false,\n\
+  \        verbose: true,\n        apiSettings: {\n          dataType: 'JSON',\n          cache:\
+  \ false,\n          beforeSend(settings) {\n            /* eslint-disable-next-line no-param-reassign\
+  \ */\n            settings.data[criteriaName] = settings.urlData.query;\n\n            return\
+  \ settings;\n          },\n          onResponse(response) {\n            let results = response.map(item\
+  \ => ({\n              name: sanitizeInput(item[choiceName]),\n              value: sanitizeInput(item[choiceValue]),\n\
+  \            }));\n\n            if (!element.hasClass('multiple')) {\n              results.unshift({\n\
+  \                name: '&nbsp;',\n                value: '',\n              });\n        \
+  \    }\n\n            return {\n              success: true,\n              results: results,\n\
+  \            };\n          },\n        },\n      });\n\n      if (autocompleteValue.split(',').filter(String).length\
+  \ > 0) {\n        const menuElement = element.find('div.menu');\n\n        menuElement.api({\n\
+  \          on: 'now',\n          method: 'GET',\n          url: loadForEditUrl,\n        \
+  \  beforeSend(settings) {\n            /* eslint-disable-next-line no-param-reassign */\n\
+  \            settings.data[choiceValue] = autocompleteValue.split(',').filter(String);\n\n\
+  \            return settings;\n          },\n          onSuccess(response) {\n           \
+  \ response.forEach((item) => {\n              menuElement.append((\n                $(`<div\
+  \ class=\"item\" data-value=\"${item[choiceValue]}\">${item[choiceName]}</div>`)\n       \
+  \       ));\n            });\n\n            element.dropdown('refresh');\n            element.dropdown('set\
+  \ selected', element.find('input.autocomplete').val().split(',').filter(String));\n      \
+  \    },\n        });\n      }\n    });\n  },\n});\n```\n\n3. Create new file `assets/admin/sylius-product-auto-complete.js`:\n\
+  \n```js\n// assets/admin/sylius-product-auto-complete.js\n\nfunction sanitizeInput(input)\
+  \ {\n  const div = document.createElement('div');\n  div.textContent = input;\n  return div.innerHTML;\
+  \ // Converts text content to plain HTML, stripping any scripts\n}\n\n$.fn.extend({\n  productAutoComplete()\
+  \ {\n    this.each((index, element) => {\n      const $element = $(element);\n      $element.dropdown('set\
+  \ selected', $element.find('input[name*=\"[associations]\"]').val().split(',').filter(String));\n\
+  \    });\n\n    this.dropdown({\n      delay: {\n        search: 250,\n      },\n      forceSelection:\
+  \ false,\n      apiSettings: {\n        dataType: 'JSON',\n        cache: false,\n       \
+  \ data: {\n          criteria: { search: { type: 'contains', value: '' } },\n        },\n\
+  \        beforeSend(settings) {\n          /* eslint-disable-next-line no-param-reassign */\n\
+  \          settings.data.criteria.search.value = settings.urlData.query;\n\n          return\
+  \ settings;\n        },\n        onResponse(response) {\n          return {\n            success:\
+  \ true,\n            results: response._embedded.items.map(item => ({\n              name:\
+  \ sanitizeInput(item.name),\n              value: sanitizeInput(item.code),\n            })),\n\
+  \          };\n        },\n      },\n      onAdd(addedValue, addedText, $addedChoice) {\n\
+  \        const inputAssociation = $addedChoice.parents('.product-select').find('input[name*=\"\
+  [associations]\"]');\n        const associatedProductCodes = inputAssociation.val().length\
+  \ > 0 ? inputAssociation.val().split(',').filter(String) : [];\n\n        associatedProductCodes.push(addedValue);\n\
+  \        $.unique(associatedProductCodes.sort());\n\n        inputAssociation.attr('value',\
+  \ associatedProductCodes.join());\n      },\n      onRemove(removedValue, removedText, $removedChoice)\
+  \ {\n        const inputAssociation = $removedChoice.parents('.product-select').find('input[name*=\"\
+  [associations]\"]');\n        const associatedProductCodes = inputAssociation.val().length\
+  \ > 0 ? inputAssociation.val().split(',').filter(String) : [];\n\n        associatedProductCodes.splice($.inArray(removedValue,\
+  \ associatedProductCodes), 1);\n\n        inputAssociation.attr('value', associatedProductCodes.join());\n\
+  \      },\n    });\n  },\n});\n```\n\n4. Add new import in `assets/admin/entry.js`:\n\n```js\n\
+  // assets/admin/entry.js\n// ...\nimport './sylius-lazy-choice-tree';\nimport './sylius-auto-complete';\n\
+  import './sylius-product-auto-complete';\n```\n\n5. Rebuild your assets:\n\n```bash\nyarn\
+  \ build\n``` \n\n### Acknowledgements\n\nThis security issue has been reported by [Checkmarx\
+  \ Research Group](https://checkmarx.com), thank you!\n\n### For more information\nIf you have\
+  \ any questions or comments about this advisory:\n* Open an issue in [Sylius issues](https://github.com/Sylius/Sylius/issues)\n\
+  * Email us at security@sylius.com"
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24712'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24741'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24616'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24672'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24722'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24768'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24769'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24733'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24725'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24748'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24729'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24717'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00152'
+    scoring_system: epss
+    scoring_elements: '0.22994'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36937'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36887'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36851'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.3697'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36979'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36978'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.37001'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36969'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36954'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.3698'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.37007'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.3701'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36943'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.3692'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-v2f9-rv6w-vw8r
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/Sylius/Sylius
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sylius/Sylius
+  - score: '4.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/Sylius/Sylius/commit/ba4b66da5af88cdb1bba6174de8bdf42f4853e12
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sylius/Sylius/commit/ba4b66da5af88cdb1bba6174de8bdf42f4853e12
+  - score: '4.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/Sylius/Sylius/security/advisories/GHSA-v2f9-rv6w-vw8r
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sylius/Sylius/security/advisories/GHSA-v2f9-rv6w-vw8r
+weaknesses:
+  - CWE-79
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-34349
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sylius/Sylius
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sylius/Sylius/commit/ba4b66da5af88cdb1bba6174de8bdf42f4853e12
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sylius/Sylius/security/advisories/GHSA-v2f9-rv6w-vw8r
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-34349
+    reference_type:
+    reference_id: CVE-2024-34349
+  - url: https://github.com/advisories/GHSA-v2f9-rv6w-vw8r
+    reference_type:
+    reference_id: GHSA-v2f9-rv6w-vw8r

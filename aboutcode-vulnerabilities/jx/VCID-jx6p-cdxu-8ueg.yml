@@ -1,0 +1,391 @@
+vulnerability_id: VCID-jx6p-cdxu-8ueg
+aliases:
+  - CVE-2024-45003
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nvfs: Don't\
+  \ evict inode under the inode lru traversing context\n\nThe inode reclaiming process(See function\
+  \ prune_icache_sb) collects all\nreclaimable inodes and mark them with I_FREEING flag at first,\
+  \ at that\ntime, other processes will be stuck if they try getting these inodes\n(See function\
+  \ find_inode_fast), then the reclaiming process destroy the\ninodes by function dispose_list().\
+  \ Some filesystems(eg. ext4 with\nea_inode feature, ubifs with xattr) may do inode lookup\
+  \ in the inode\nevicting callback function, if the inode lookup is operated under the\ninode\
+  \ lru traversing context, deadlock problems may happen.\n\nCase 1: In function ext4_evict_inode(),\
+  \ the ea inode lookup could happen\n        if ea_inode feature is enabled, the lookup process\
+  \ will be stuck\n\tunder the evicting context like this:\n\n 1. File A has inode i_reg and\
+  \ an ea inode i_ea\n 2. getfattr(A, xattr_buf) // i_ea is added into lru // lru->i_ea\n 3.\
+  \ Then, following three processes running like this:\n\n    PA                           \
+  \   PB\n echo 2 > /proc/sys/vm/drop_caches\n  shrink_slab\n   prune_dcache_sb\n   // i_reg\
+  \ is added into lru, lru->i_ea->i_reg\n   prune_icache_sb\n    list_lru_walk_one\n     inode_lru_isolate\n\
+  \      i_ea->i_state |= I_FREEING // set inode state\n     inode_lru_isolate\n      __iget(i_reg)\n\
+  \      spin_unlock(&i_reg->i_lock)\n      spin_unlock(lru_lock)\n                        \
+  \             rm file A\n                                      i_reg->nlink = 0\n      iput(i_reg)\
+  \ // i_reg->nlink is 0, do evict\n       ext4_evict_inode\n        ext4_xattr_delete_inode\n\
+  \         ext4_xattr_inode_dec_ref_all\n          ext4_xattr_inode_iget\n           ext4_iget(i_ea->i_ino)\n\
+  \            iget_locked\n             find_inode_fast\n              __wait_on_freeing_inode(i_ea)\
+  \ ----? AA deadlock\n    dispose_list // cannot be executed by prune_icache_sb\n     wake_up_bit(&i_ea->i_state)\n\
+  \nCase 2: In deleted inode writing function ubifs_jnl_write_inode(), file\n        deleting\
+  \ process holds BASEHD's wbuf->io_mutex while getting the\n\txattr inode, which could race\
+  \ with inode reclaiming process(The\n        reclaiming process could try locking BASEHD's\
+  \ wbuf->io_mutex in\n\tinode evicting function), then an ABBA deadlock problem would\n\thappen\
+  \ as following:\n\n 1. File A has inode ia and a xattr(with inode ixa), regular file B has\n\
+  \    inode ib and a xattr.\n 2. getfattr(A, xattr_buf) // ixa is added into lru // lru->ixa\n\
+  \ 3. Then, following three processes running like this:\n\n        PA                PB  \
+  \                      PC\n                echo 2 > /proc/sys/vm/drop_caches\n           \
+  \      shrink_slab\n                  prune_dcache_sb\n                  // ib and ia are\
+  \ added into lru, lru->ixa->ib->ia\n                  prune_icache_sb\n                  \
+  \ list_lru_walk_one\n                    inode_lru_isolate\n                     ixa->i_state\
+  \ |= I_FREEING // set inode state\n                    inode_lru_isolate\n               \
+  \      __iget(ib)\n                     spin_unlock(&ib->i_lock)\n                     spin_unlock(lru_lock)\n\
+  \                                                   rm file B\n                          \
+  \                          ib->nlink = 0\n rm file A\n  iput(ia)\n   ubifs_evict_inode(ia)\n\
+  \    ubifs_jnl_delete_inode(ia)\n     ubifs_jnl_write_inode(ia)\n      make_reservation(BASEHD)\
+  \ // Lock wbuf->io_mutex\n      ubifs_iget(ixa->i_ino)\n       iget_locked\n        find_inode_fast\n\
+  \         __wait_on_freeing_inode(ixa)\n          |          iput(ib) // ib->nlink is 0, do\
+  \ evict\n          |           ubifs_evict_inode\n          |            ubifs_jnl_delete_inode(ib)\n\
+  \          ?             ubifs_jnl_write_inode\n     ABBA deadlock ?-----make_reservation(BASEHD)\n\
+  \                   dispose_list // cannot be executed by prune_icache_sb\n              \
+  \      wake_up_bit(&ixa->i_state)\n\nFix the possible deadlock by using new inode state flag\
+  \ I_LRU_ISOLATING\nto pin the inode in memory while inode_lru_isolate(\n---truncated---"
+severities:
+  - score: '4.7'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-45003.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05124'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05115'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05119'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05108'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05100'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05073'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05058'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.125'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12356'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12413'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12511'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12584'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12587'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1256'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1252'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12507'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12489'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12492'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1251'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12516'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12509'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11749'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11786'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14294'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14273'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14219'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14314'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14321'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14275'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14257'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14271'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14287'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14227'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14241'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.1426'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.14296'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.28386'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '4.7'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45003
+  - score: '4.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45003
+weaknesses:
+  - CWE-667
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-45003.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-45003
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-45003
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/03880af02a78bc9a98b5a581f529cf709c88a9b8
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2a0629834cd82f05d424bbc193374f9a43d1f87d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3525ad25240dfdd8c78f3470911ed10aa727aa72
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/437741eba63bf4e437e2beb5583f8633556a2b98
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9063ab49c11e9518a3f2352434bb276cc8134c5f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b9bda5f6012dd00372f3a06a82ed8971a4c57c32
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/cda54ec82c0f9d05393242b20b13f69b083f7e88
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2309866
+    reference_type:
+    reference_id: 2309866
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.11:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.11:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.11:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.11:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.11:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.11:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-45003
+    reference_type:
+    reference_id: CVE-2024-45003
+  - url: https://usn.ubuntu.com/7088-1/
+    reference_type:
+    reference_id: USN-7088-1
+  - url: https://usn.ubuntu.com/7088-2/
+    reference_type:
+    reference_id: USN-7088-2
+  - url: https://usn.ubuntu.com/7088-3/
+    reference_type:
+    reference_id: USN-7088-3
+  - url: https://usn.ubuntu.com/7088-4/
+    reference_type:
+    reference_id: USN-7088-4
+  - url: https://usn.ubuntu.com/7088-5/
+    reference_type:
+    reference_id: USN-7088-5
+  - url: https://usn.ubuntu.com/7100-1/
+    reference_type:
+    reference_id: USN-7100-1
+  - url: https://usn.ubuntu.com/7100-2/
+    reference_type:
+    reference_id: USN-7100-2
+  - url: https://usn.ubuntu.com/7119-1/
+    reference_type:
+    reference_id: USN-7119-1
+  - url: https://usn.ubuntu.com/7123-1/
+    reference_type:
+    reference_id: USN-7123-1
+  - url: https://usn.ubuntu.com/7144-1/
+    reference_type:
+    reference_id: USN-7144-1
+  - url: https://usn.ubuntu.com/7154-1/
+    reference_type:
+    reference_id: USN-7154-1
+  - url: https://usn.ubuntu.com/7154-2/
+    reference_type:
+    reference_id: USN-7154-2
+  - url: https://usn.ubuntu.com/7155-1/
+    reference_type:
+    reference_id: USN-7155-1
+  - url: https://usn.ubuntu.com/7156-1/
+    reference_type:
+    reference_id: USN-7156-1
+  - url: https://usn.ubuntu.com/7194-1/
+    reference_type:
+    reference_id: USN-7194-1
+  - url: https://usn.ubuntu.com/7196-1/
+    reference_type:
+    reference_id: USN-7196-1

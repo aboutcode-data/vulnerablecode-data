@@ -1,0 +1,358 @@
+vulnerability_id: VCID-4q7r-62n5-4ucj
+aliases:
+  - CVE-2024-50200
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nmaple_tree:\
+  \ correct tree corruption on spanning store\n\nPatch series \"maple_tree: correct tree corruption\
+  \ on spanning store\", v3.\n\nThere has been a nasty yet subtle maple tree corruption bug\
+  \ that appears\nto have been in existence since the inception of the algorithm.\n\nThis bug\
+  \ seems far more likely to happen since commit f8d112a4e657\n(\"mm/mmap: avoid zeroing vma\
+  \ tree in mmap_region()\"), which is the point\nat which reports started to be submitted concerning\
+  \ this bug.\n\nWe were made definitely aware of the bug thanks to the kind efforts of\nBert\
+  \ Karwatzki who helped enormously in my being able to track this down\nand identify the cause\
+  \ of it.\n\nThe bug arises when an attempt is made to perform a spanning store across\ntwo\
+  \ leaf nodes, where the right leaf node is the rightmost child of the\nshared parent, AND\
+  \ the store completely consumes the right-mode node.\n\nThis results in mas_wr_spanning_store()\
+  \ mitakenly duplicating the new and\nexisting entries at the maximum pivot within the range,\
+  \ and thus maple\ntree corruption.\n\nThe fix patch corrects this by detecting this scenario\
+  \ and disallowing the\nmistaken duplicate copy.\n\nThe fix patch commit message goes into\
+  \ great detail as to how this occurs.\n\nThis series also includes a test which reliably reproduces\
+  \ the issue, and\nasserts that the fix works correctly.\n\nBert has kindly tested the fix\
+  \ and confirmed it resolved his issues.  Also\nMikhail Gavrilov kindly reported what appears\
+  \ to be precisely the same\nbug, which this fix should also resolve.\n\n\nThis patch (of 2):\n\
+  \nThere has been a subtle bug present in the maple tree implementation from\nits inception.\n\
+  \nThis arises from how stores are performed - when a store occurs, it will\noverwrite overlapping\
+  \ ranges and adjust the tree as necessary to\naccommodate this.\n\nA range may always ultimately\
+  \ span two leaf nodes.  In this instance we\nwalk the two leaf nodes, determine which elements\
+  \ are not overwritten to\nthe left and to the right of the start and end of the ranges respectively\n\
+  and then rebalance the tree to contain these entries and the newly\ninserted one.\n\nThis\
+  \ kind of store is dubbed a 'spanning store' and is implemented by\nmas_wr_spanning_store().\n\
+  \nIn order to reach this stage, mas_store_gfp() invokes\nmas_wr_preallocate(), mas_wr_store_type()\
+  \ and mas_wr_walk() in turn to\nwalk the tree and update the object (mas) to traverse to the\
+  \ location\nwhere the write should be performed, determining its store type.\n\nWhen a spanning\
+  \ store is required, this function returns false stopping at\nthe parent node which contains\
+  \ the target range, and mas_wr_store_type()\nmarks the mas->store_type as wr_spanning_store\
+  \ to denote this fact.\n\nWhen we go to perform the store in mas_wr_spanning_store(), we first\n\
+  determine the elements AFTER the END of the range we wish to store (that\nis, to the right\
+  \ of the entry to be inserted) - we do this by walking to\nthe NEXT pivot in the tree (i.e.\
+  \  r_mas.last + 1), starting at the node we\nhave just determined contains the range over\
+  \ which we intend to write.\n\nWe then turn our attention to the entries to the left of the\
+  \ entry we are\ninserting, whose state is represented by l_mas, and copy these into a 'big\n\
+  node', which is a special node which contains enough slots to contain two\nleaf node's worth\
+  \ of data.\n\nWe then copy the entry we wish to store immediately after this - the copy\n\
+  and the insertion of the new entry is performed by mas_store_b_node().\n\nAfter this we copy\
+  \ the elements to the right of the end of the range which\nwe are inserting, if we have not\
+  \ exceeded the length of the node (i.e. \nr_mas.offset <= r_mas.end).\n\nHerein lies the bug\
+  \ - under very specific circumstances, this logic can\nbreak and corrupt the maple tree.\n\
+  \nConsider the following tree:\n\nHeight\n  0                             Root Node\n    \
+  \                             /      \\\n                 pivot = 0xffff /        \\ pivot\
+  \ = ULONG_MAX\n                               /          \n---truncated---"
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-50200.json
+  - score: '7.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-50200.json
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.07136'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09069'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09085'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09113'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.0908'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09055'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09034'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.08988'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11401'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11349'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11508'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.09058'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09411'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09532'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09556'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09588'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09461'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.06422'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00041'
+    scoring_system: epss
+    scoring_elements: '0.09518'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15573'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15612'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15617'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15593'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.1557'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15558'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15564'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15578'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15598'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15602'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15592'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-99
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-50200.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-50200
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-50200
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/677f1df179cb68c12ddf7707ec325eb50e99c7d9
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/7c7874977da9e47ca0f53d8b9a5b17385fed83f2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/982dd0d26d1f015ed34866579480d2be5250b0ef
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/bea07fd63192b61209d48cbb81ef474cc3ee4c62
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2324566
+    reference_type:
+    reference_id: 2324566
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-50200
+    reference_type:
+    reference_id: CVE-2024-50200
+  - url: https://usn.ubuntu.com/7276-1/
+    reference_type:
+    reference_id: USN-7276-1
+  - url: https://usn.ubuntu.com/7277-1/
+    reference_type:
+    reference_id: USN-7277-1
+  - url: https://usn.ubuntu.com/7310-1/
+    reference_type:
+    reference_id: USN-7310-1
+  - url: https://usn.ubuntu.com/7383-1/
+    reference_type:
+    reference_id: USN-7383-1
+  - url: https://usn.ubuntu.com/7383-2/
+    reference_type:
+    reference_id: USN-7383-2
+  - url: https://usn.ubuntu.com/7384-1/
+    reference_type:
+    reference_id: USN-7384-1
+  - url: https://usn.ubuntu.com/7384-2/
+    reference_type:
+    reference_id: USN-7384-2
+  - url: https://usn.ubuntu.com/7385-1/
+    reference_type:
+    reference_id: USN-7385-1
+  - url: https://usn.ubuntu.com/7386-1/
+    reference_type:
+    reference_id: USN-7386-1
+  - url: https://usn.ubuntu.com/7403-1/
+    reference_type:
+    reference_id: USN-7403-1
+  - url: https://usn.ubuntu.com/7451-1/
+    reference_type:
+    reference_id: USN-7451-1
+  - url: https://usn.ubuntu.com/7468-1/
+    reference_type:
+    reference_id: USN-7468-1

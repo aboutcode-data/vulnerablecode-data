@@ -1,0 +1,89 @@
+vulnerability_id: VCID-2mwy-mzb8-aaam
+aliases:
+  - GHSA-x5fr-7hhj-34j3
+summary: |
+  Full Table Permissions by Default
+  Default table permissions in SurrealDB were `FULL` instead of `NONE`. This would lead to tables having `FULL` permissions for `SELECT`, `CREATE`, `UPDATE` and `DELETE` unless some other permissions were specified via the `PERMISSIONS` clause.
+
+  We have decided to treat this behaviour as a vulnerability due to its security implications, especially considering the lack of specific documentation and potential for confusion due to the `INFO FOR DB` statement previously not displaying default permissions. Treating it as a bug fix provides justification for a change in default behavior outside of a major release.
+
+  ### Impact
+
+  Any client authorized to query data in a SurrealDB instance will have full access to any tables that were defined with no explicit permissions and that are within its authorization scope (i.e. namespace or database), including creating, reading, updating and deleting data. This is specially relevant for SurrealDB instances allowing guest access with publicly exposed interfaces (e.g. HTTP REST API or WebSocket API), since a remote unauthenticated user may gain full access to any tables that were defined without any explicit permissions. Tables that were defined with explicit permissions using the `PERMISSIONS` clause are not affected.
+
+  ### Patches
+
+  - Version `1.0.1` includes a patch for this specific issue. Later releases will also include the patch.
+  - Version `1.1.0-beta.1` and latest nightly releases already include the patch for this issue.
+
+  In patched versions:
+
+  - Tables defined after the patch without explicit permissions have `NONE` permissions.
+  - Table permissions are always explicitly displayed with the `INFO FOR DB` statement.
+
+  ### Workarounds
+
+  In unpatched versions, this issue can be resolved by explicitly defining table permissions as shown in the following examples:
+
+  ```sql
+  -- INSECURE EXAMPLE
+  -- DEFINE TABLE insecure;
+  -- SECURE EXAMPLE 1
+  DEFINE TABLE secure PERMISSIONS NONE;
+  -- SECURE EXAMPLE 2
+  DEFINE TABLE secure PERMISSIONS FOR SELECT, CREATE, UPDATE, DELETE NONE;
+  -- SECURE EXAMPLE 3
+  DEFINE TABLE secure PERMISSIONS FOR
+    SELECT WHERE user = $auth.id,
+    CREATE, UPDATE, DELETE NONE;
+  -- SECURE EXAMPLE 4
+  DEFINE TABLE secure PERMISSIONS
+    FOR select WHERE published = true OR user = $auth.id
+    FOR create, update WHERE user = $auth.id
+    FOR delete WHERE user = $auth.id OR $auth.admin = true;
+  ```
+
+  ### References
+
+  - https://github.com/surrealdb/surrealdb/pull/3074
+  - https://github.com/surrealdb/surrealdb/pull/3083
+  - https://github.com/surrealdb/surrealdb/pull/3125
+  - https://docs.surrealdb.com/docs/surrealql/statements/define/table/
+  - https://docs.surrealdb.com/docs/security/capabilities#guest-access
+severities:
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-x5fr-7hhj-34j3
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/surrealdb/surrealdb
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/surrealdb/surrealdb
+  - score: '8.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/surrealdb/surrealdb/security/advisories/GHSA-x5fr-7hhj-34j3
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/surrealdb/surrealdb/security/advisories/GHSA-x5fr-7hhj-34j3
+weaknesses: []
+references:
+  - url: https://github.com/surrealdb/surrealdb
+    reference_type:
+    reference_id:
+  - url: https://github.com/surrealdb/surrealdb/security/advisories/GHSA-x5fr-7hhj-34j3
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-x5fr-7hhj-34j3
+    reference_type:
+    reference_id: GHSA-x5fr-7hhj-34j3

@@ -1,0 +1,329 @@
+vulnerability_id: VCID-ywyh-zs5s-aaaj
+aliases:
+  - CVE-2024-38306
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nbtrfs: protect\
+  \ folio::private when attaching extent buffer folios\n\n[BUG]\nSince v6.8 there are rare kernel\
+  \ crashes reported by various people,\nthe common factor is bad page status error messages\
+  \ like this:\n\n  BUG: Bad page state in process kswapd0  pfn:d6e840\n  page: refcount:0 mapcount:0\
+  \ mapping:000000007512f4f2 index:0x2796c2c7c\n  pfn:0xd6e840\n  aops:btree_aops ino:1\n  flags:\
+  \ 0x17ffffe0000008(uptodate|node=0|zone=2|lastcpupid=0x3fffff)\n  page_type: 0xffffffff()\n\
+  \  raw: 0017ffffe0000008 dead000000000100 dead000000000122 ffff88826d0be4c0\n  raw: 00000002796c2c7c\
+  \ 0000000000000000 00000000ffffffff 0000000000000000\n  page dumped because: non-NULL mapping\n\
+  \n[CAUSE]\nCommit 09e6cef19c9f (\"btrfs: refactor alloc_extent_buffer() to\nallocate-then-attach\
+  \ method\") changes the sequence when allocating a new\nextent buffer.\n\nPreviously we always\
+  \ called grab_extent_buffer() under\nmapping->i_private_lock, to ensure the safety on modification\
+  \ on\nfolio::private (which is a pointer to extent buffer for regular\nsectorsize).\n\nThis\
+  \ can lead to the following race:\n\nThread A is trying to allocate an extent buffer at bytenr\
+  \ X, with 4\n4K pages, meanwhile thread B is trying to release the page at X + 4K\n(the second\
+  \ page of the extent buffer at X).\n\n           Thread A                |               \
+  \  Thread B\n-----------------------------------+-------------------------------------\n \
+  \                                  | btree_release_folio()\n\t\t\t\t   | | This is for the\
+  \ page at X + 4K,\n\t\t\t\t   | | Not page X.\n\t\t\t\t   | |\nalloc_extent_buffer()     \
+  \         | |- release_extent_buffer()\n|- filemap_add_folio() for the     | |  |- atomic_dec_and_test(eb->refs)\n\
+  |  page at bytenr X (the first     | |  |\n|  page).                          | |  |\n|  Which\
+  \ returned -EEXIST.         | |  |\n|                                  | |  |\n|- filemap_lock_folio()\
+  \            | |  |\n|  Returned the first page locked. | |  |\n|                        \
+  \          | |  |\n|- grab_extent_buffer()            | |  |\n|  |- atomic_inc_not_zero()\
+  \        | |  |\n|  |  Returned false               | |  |\n|  |- folio_detach_private() \
+  \      | |  |- folio_detach_private() for X\n|     |- folio_test_private()      | |     |-\
+  \ folio_test_private()\n      |  Returned true             | |     |  Returned true\n    \
+  \  |- folio_put()               |       |- folio_put()\n\nNow there are two puts on the same\
+  \ folio at folio X, leading to refcount\nunderflow of the folio X, and eventually causing\
+  \ the BUG_ON() on the\npage->mapping.\n\nThe condition is not that easy to hit:\n\n- The release\
+  \ must be triggered for the middle page of an eb\n  If the release is on the same first page\
+  \ of an eb, page lock would kick\n  in and prevent the race.\n\n- folio_detach_private() has\
+  \ a very small race window\n  It's only between folio_test_private() and folio_clear_private().\n\
+  \nThat's exactly when mapping->i_private_lock is used to prevent such race,\nand commit 09e6cef19c9f\
+  \ (\"btrfs: refactor alloc_extent_buffer() to\nallocate-then-attach method\") screwed that\
+  \ up.\n\nAt that time, I thought the page lock would kick in as\nfilemap_release_folio() also\
+  \ requires the page to be locked, but forgot\nthe filemap_release_folio() only locks one page,\
+  \ not all pages of an\nextent buffer.\n\n[FIX]\nMove all the code requiring i_private_lock\
+  \ into\nattach_eb_folio_to_filemap(), so that everything is done with proper\nlock protection.\n\
+  \nFurthermore to prevent future problems, add an extra\nlockdep_assert_locked() to ensure\
+  \ we're holding the proper lock.\n\nTo reproducer that is able to hit the race (takes a few\
+  \ minutes with\ninstrumented code inserting delays to alloc_extent_buffer()):\n\n  #!/bin/sh\n\
+  \  drop_caches () {\n\t  while(true); do\n\t\t  echo 3 > /proc/sys/vm/drop_caches\n\t\t  echo\
+  \ 1 > /proc/sys/vm/compact_memory\n\t  done\n  }\n\n  run_tar () {\n\t  while(true); do\n\t\
+  \t  for x in `seq 1 80` ; do\n\t\t\t  tar cf /dev/zero /mnt > /dev/null &\n\t\t  done\n\t\t\
+  \  wait\n\t  done\n  }\n\n  mkfs.btrfs -f -d single -m single\n---truncated---"
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-38306.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.28449'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.2849'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.2855'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.28556'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.28514'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00097'
+    scoring_system: epss
+    scoring_elements: '0.28389'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29425'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29488'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29451'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.2945'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29457'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29475'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29456'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.30048'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.30021'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29998'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29976'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29977'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29982'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29971'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29814'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29984'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.30014'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29863'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.3001'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29969'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29944'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00134'
+    scoring_system: epss
+    scoring_elements: '0.29948'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: '0.00585'
+    scoring_system: epss
+    scoring_elements: '0.52372'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+  - score: 7
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-362
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-38306.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-38306
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/952f048eb901881a7cc6f7c1368b53cd386ead7b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f3a5367c679d31473d3fbb391675055b4792c309
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2294281
+    reference_type:
+    reference_id: 2294281
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-38306
+    reference_type:
+    reference_id: CVE-2024-38306
+  - url: https://usn.ubuntu.com/6999-1/
+    reference_type:
+    reference_id: USN-6999-1
+  - url: https://usn.ubuntu.com/6999-2/
+    reference_type:
+    reference_id: USN-6999-2
+  - url: https://usn.ubuntu.com/7004-1/
+    reference_type:
+    reference_id: USN-7004-1
+  - url: https://usn.ubuntu.com/7005-1/
+    reference_type:
+    reference_id: USN-7005-1
+  - url: https://usn.ubuntu.com/7005-2/
+    reference_type:
+    reference_id: USN-7005-2
+  - url: https://usn.ubuntu.com/7008-1/
+    reference_type:
+    reference_id: USN-7008-1
+  - url: https://usn.ubuntu.com/7029-1/
+    reference_type:
+    reference_id: USN-7029-1

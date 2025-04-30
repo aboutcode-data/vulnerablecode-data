@@ -1,0 +1,188 @@
+vulnerability_id: VCID-ztud-ku9e-p3dp
+aliases:
+  - CVE-2025-22083
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  vhost-scsi: Fix handling of multiple calls to vhost_scsi_set_endpoint
+
+  If vhost_scsi_set_endpoint is called multiple times without a
+  vhost_scsi_clear_endpoint between them, we can hit multiple bugs
+  found by Haoran Zhang:
+
+  1. Use-after-free when no tpgs are found:
+
+  This fixes a use after free that occurs when vhost_scsi_set_endpoint is
+  called more than once and calls after the first call do not find any
+  tpgs to add to the vs_tpg. When vhost_scsi_set_endpoint first finds
+  tpgs to add to the vs_tpg array match=true, so we will do:
+
+  vhost_vq_set_backend(vq, vs_tpg);
+  ...
+
+  kfree(vs->vs_tpg);
+  vs->vs_tpg = vs_tpg;
+
+  If vhost_scsi_set_endpoint is called again and no tpgs are found
+  match=false so we skip the vhost_vq_set_backend call leaving the
+  pointer to the vs_tpg we then free via:
+
+  kfree(vs->vs_tpg);
+  vs->vs_tpg = vs_tpg;
+
+  If a scsi request is then sent we do:
+
+  vhost_scsi_handle_vq -> vhost_scsi_get_req -> vhost_vq_get_backend
+
+  which sees the vs_tpg we just did a kfree on.
+
+  2. Tpg dir removal hang:
+
+  This patch fixes an issue where we cannot remove a LIO/target layer
+  tpg (and structs above it like the target) dir due to the refcount
+  dropping to -1.
+
+  The problem is that if vhost_scsi_set_endpoint detects a tpg is already
+  in the vs->vs_tpg array or if the tpg has been removed so
+  target_depend_item fails, the undepend goto handler will do
+  target_undepend_item on all tpgs in the vs_tpg array dropping their
+  refcount to 0. At this time vs_tpg contains both the tpgs we have added
+  in the current vhost_scsi_set_endpoint call as well as tpgs we added in
+  previous calls which are also in vs->vs_tpg.
+
+  Later, when vhost_scsi_clear_endpoint runs it will do
+  target_undepend_item on all the tpgs in the vs->vs_tpg which will drop
+  their refcount to -1. Userspace will then not be able to remove the tpg
+  and will hang when it tries to do rmdir on the tpg dir.
+
+  3. Tpg leak:
+
+  This fixes a bug where we can leak tpgs and cause them to be
+  un-removable because the target name is overwritten when
+  vhost_scsi_set_endpoint is called multiple times but with different
+  target names.
+
+  The bug occurs if a user has called VHOST_SCSI_SET_ENDPOINT and setup
+  a vhost-scsi device to target/tpg mapping, then calls
+  VHOST_SCSI_SET_ENDPOINT again with a new target name that has tpgs we
+  haven't seen before (target1 has tpg1 but target2 has tpg2). When this
+  happens we don't teardown the old target tpg mapping and just overwrite
+  the target name and the vs->vs_tpg array. Later when we do
+  vhost_scsi_clear_endpoint, we are passed in either target1 or target2's
+  name and we will only match that target's tpgs when we loop over the
+  vs->vs_tpg. We will then return from the function without doing
+  target_undepend_item on the tpgs.
+
+  Because of all these bugs, it looks like being able to call
+  vhost_scsi_set_endpoint multiple times was never supported. The major
+  user, QEMU, already has checks to prevent this use case. So to fix the
+  issues, this patch prevents vhost_scsi_set_endpoint from being called
+  if it's already successfully added tpgs. To add, remove or change the
+  tpg config or target name, you must do a vhost_scsi_clear_endpoint
+  first.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22083.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03093'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03082'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03092'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03074'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03075'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04755'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04716'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04746'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04741'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04749'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04751'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04764'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22083.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22083
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-22083
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2b34bdc42df047794542f3e220fe989124e4499a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3a19eb3d9818e28f14c818a18dc913344a52ca92
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3fd054baf382a426bbf5135ede0fc5673db74d3e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5dd639a1646ef5fe8f4bf270fad47c5c3755b9b6
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/63b449f73ab0dcc0ba11ceaa4c5c70bc86ccf03c
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360218
+    reference_type:
+    reference_id: 2360218
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22083
+    reference_type:
+    reference_id: CVE-2025-22083

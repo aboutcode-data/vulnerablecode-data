@@ -1,0 +1,332 @@
+vulnerability_id: VCID-sv66-59qn-aaaf
+aliases:
+  - CVE-2023-32196
+  - GHSA-64jq-m7rq-768h
+summary: |
+  Rancher's External RoleTemplates can lead to privilege escalation
+  ### Impact
+  A vulnerability has been identified whereby privilege escalation checks are not properly enforced for `RoleTemplate`objects when external=true, which in specific scenarios can lead to privilege escalation.
+
+  The bug in the webhook rule resolver ignores rules from a `ClusterRole` for external `RoleTemplates` when its context is set to either `project` or is left empty. The fix introduces a new field to the `RoleTemplate` CRD named `ExternalRules`. The new field will be used to resolve rules directly from the `RoleTemplate`. Additionally, rules from the backing `ClusterRole` will be used if `ExternalRules` is not provided. The new field will always take precedence when it is set, and serve as the source of truth for rules used when creating Rancher resources on the local cluster.
+
+  Please note that this is a breaking change for external `RoleTemplates`, when context is set to `project` or empty and the backing `ClusterRole` does not exist, as this was not previously required.
+
+  **Important:** The fix is automatically applied when upgrading to the release lines `2.8`and above. For users still on the `2.7` release line, after the upgrade to a patched version, users are required to opt-in to the fix by enabling the `external-rules` [feature flag](https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/installation-references/feature-flags).
+
+  Please consult the associated [MITRE ATT&CK - Technique - Exploitation for Privilege Escalation](https://attack.mitre.org/techniques/T1068/) for further information about this category of attack.
+
+  ### Patches
+  Patched versions include releases `2.7.14` and `2.8.5`.
+
+  ### Workarounds
+  The following script was developed for Rancher Manager administrators to identify `RoleTemplates` impacted by this vulnerability. The script requires `jq` installed and a `kubeconfig` with access to Rancher local cluster; it can also be executed in Rancher's kubectl shell.
+
+  ```bash
+  #!/bin/bash
+  set -euo pipefail
+
+  # get all RoleTemplates with .context == "project" or .context == "" that don't have externalRules.
+  rts=$(kubectl get roletemplates -o json | jq -r  '.items[] | select((.context == "project" or .context == "") and .external == true and .externalRules == null) | .metadata.name')
+  found_invalid_rt=false
+
+  for rt in $rts; do
+    if ! kubectl get clusterrole "$rt" > /dev/null 2>&1; then
+       echo "$rt" # prints RoleTemplate names that don't have a backing ClusterRole
+       found_invalid_rt=true
+    fi
+  done
+
+  if ! $found_invalid_rt ; then
+      echo 'This cluster is not affected by CVE-2023-32197: no RoleTemplate objects found'
+  fi
+  ```
+
+  It will return all objects affected by this vulnerability. The administrator can fix those objects by creating the backing `ClusterRole` that they refer to.
+
+
+  ### References
+  - [CVE-2023-32196](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-32196)
+
+  If you have any questions or comments about this advisory:
+  - Reach out to the [SUSE Rancher Security team](https://github.com/rancher/rancher/security/policy) for security-related inquiries.
+  - Open an issue in the [Rancher](https://github.com/rancher/rancher/issues/new/choose) repository.
+  - Verify with our [support matrix](https://www.suse.com/suse-rancher/support-matrix/all-supported-versions/) and [product support lifecycle](https://www.suse.com/lifecycle/).
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23439'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23443'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23452'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23317'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23376'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23428'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23477'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.2348'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23454'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23434'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23463'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23471'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00075'
+    scoring_system: epss
+    scoring_elements: '0.23446'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.15709'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28003'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.27934'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.27885'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28031'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28047'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.2806'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28082'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28043'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28006'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28045'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28076'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.2808'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28042'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '0.00121'
+    scoring_system: epss
+    scoring_elements: '0.28017'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+  - score: '6.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://bugzilla.suse.com/show_bug.cgi?id=CVE-2023-32196
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://bugzilla.suse.com/show_bug.cgi?id=CVE-2023-32196
+  - score: '9.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/rancher/rancher
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rancher/rancher
+  - score: '6.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/rancher/rancher/security/advisories/GHSA-64jq-m7rq-768h
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rancher/rancher/security/advisories/GHSA-64jq-m7rq-768h
+  - score: '6.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-32196
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-32196
+weaknesses:
+  - CWE-269
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-32196
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.suse.com/show_bug.cgi?id=CVE-2023-32196
+    reference_type:
+    reference_id:
+  - url: https://github.com/rancher/rancher
+    reference_type:
+    reference_id:
+  - url: https://github.com/rancher/rancher/security/advisories/GHSA-64jq-m7rq-768h
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-32196
+    reference_type:
+    reference_id:

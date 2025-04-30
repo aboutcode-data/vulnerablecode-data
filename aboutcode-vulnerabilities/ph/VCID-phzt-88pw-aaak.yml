@@ -1,0 +1,119 @@
+vulnerability_id: VCID-phzt-88pw-aaak
+aliases:
+  - GHSA-6878-6wc2-pf5h
+summary: |
+  Sequential calls of encryption API (`encrypt`, `wrap`, and `dump`) result in nonce reuse
+  **Problem**: Trying to create a new encrypted message with the same cocoon object generates the same ciphertext. It mostly affects `MiniCocoon` and `Cocoon` objects with custom seeds and RNGs (where `StdRng` is used under the hood).
+
+  **Note**: The issue does **NOT** affect objects created with **`Cocoon::new`** which utilizes `ThreadRng`.
+
+  **Cause**: `StdRng` produces the same nonce because `StdRng::clone` resets its state.
+
+  **Measure**: Make encryption API mutable (`encrypt`, `wrap`, and `dump`).
+
+  **Workaround**: Create a new cocoon object with a new **seed** per each encryption.
+
+  ## How to Reproduce
+
+  ```rust
+  let cocoon = MiniCocoon::from_password(b"password", &[1; 32]);
+  let mut data1 = "my secret data".to_owned().into_bytes();
+  let _ = cocoon.encrypt(&mut data1)?;
+
+  let mut data2 = "my secret data".to_owned().into_bytes();
+  let _ = cocoon.encrypt(&mut data2)?;
+
+  // data1: [23, 217, 251, 151, 179, 62, 85, 15, 253, 92, 192, 112, 200, 52]
+  // data2: [23, 217, 251, 151, 179, 62, 85, 15, 253, 92, 192, 112, 200, 52]
+  ```
+
+  ## Workaround
+
+  For `cocoon <= 0.3.3`, create a new cocoon with a different **seed** per each `encrypt`/`wrap`/`dump` call.
+
+  ```rust
+  let cocoon = MiniCocoon::from_password(b"password", &[1; 32]);
+  let mut data1 = "my secret data".to_owned().into_bytes();
+  let _ = cocoon.encrypt(&mut data1)?;
+
+  // Another seed: &[2; 32].
+  let cocoon = MiniCocoon::from_password(b"password", &[2; 32]);
+  let mut data2 = "my secret data".to_owned().into_bytes();
+  let _ = cocoon.encrypt(&mut data2)?;
+
+  // data1: [23, 217, 251, 151, 179, 62, 85, 15, 253, 92, 192, 112, 200, 52]
+  // data2: [53, 223, 209, 96, 130, 99, 209, 108, 83, 189, 123, 81, 19, 1]
+  ```
+severities:
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N/E:P
+    published_at: None
+    url: https://github.com/advisories/GHSA-6878-6wc2-pf5h
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-6878-6wc2-pf5h
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-10-02T13:38:37Z/
+    published_at: None
+    url: https://github.com/advisories/GHSA-6878-6wc2-pf5h
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/commit
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/commit
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/commit/1b6392173ce35db4736a94b62b2d2973f9a71441
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/commit/1b6392173ce35db4736a94b62b2d2973f9a71441
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/issues/22
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fadeevab/cocoon/issues/22
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:L/A:N
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2023-0068.html
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2023-0068.html
+weaknesses: []
+references:
+  - url: https://github.com/fadeevab/cocoon/commit
+    reference_type:
+    reference_id:
+  - url: https://github.com/fadeevab/cocoon/commit/1b6392173ce35db4736a94b62b2d2973f9a71441
+    reference_type:
+    reference_id:
+  - url: https://github.com/fadeevab/cocoon/issues/22
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2023-0068.html
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-6878-6wc2-pf5h
+    reference_type:
+    reference_id: GHSA-6878-6wc2-pf5h

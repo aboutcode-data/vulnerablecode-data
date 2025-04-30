@@ -1,0 +1,305 @@
+vulnerability_id: VCID-drjb-1smc-aaag
+aliases:
+  - CVE-2024-35873
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  riscv: Fix vector state restore in rt_sigreturn()
+
+  The RISC-V Vector specification states in "Appendix D: Calling
+  Convention for Vector State" [1] that "Executing a system call causes
+  all caller-saved vector registers (v0-v31, vl, vtype) and vstart to
+  become unspecified.". In the RISC-V kernel this is called "discarding
+  the vstate".
+
+  Returning from a signal handler via the rt_sigreturn() syscall, vector
+  discard is also performed. However, this is not an issue since the
+  vector state should be restored from the sigcontext, and therefore not
+  care about the vector discard.
+
+  The "live state" is the actual vector register in the running context,
+  and the "vstate" is the vector state of the task. A dirty live state,
+  means that the vstate and live state are not in synch.
+
+  When vectorized user_from_copy() was introduced, an bug sneaked in at
+  the restoration code, related to the discard of the live state.
+
+  An example when this go wrong:
+
+    1. A userland application is executing vector code
+    2. The application receives a signal, and the signal handler is
+       entered.
+    3. The application returns from the signal handler, using the
+       rt_sigreturn() syscall.
+    4. The live vector state is discarded upon entering the
+       rt_sigreturn(), and the live state is marked as "dirty", indicating
+       that the live state need to be synchronized with the current
+       vstate.
+    5. rt_sigreturn() restores the vstate, except the Vector registers,
+       from the sigcontext
+    6. rt_sigreturn() restores the Vector registers, from the sigcontext,
+       and now the vectorized user_from_copy() is used. The dirty live
+       state from the discard is saved to the vstate, making the vstate
+       corrupt.
+    7. rt_sigreturn() returns to the application, which crashes due to
+       corrupted vstate.
+
+  Note that the vectorized user_from_copy() is invoked depending on the
+  value of CONFIG_RISCV_ISA_V_UCOPY_THRESHOLD. Default is 768, which
+  means that vlen has to be larger than 128b for this bug to trigger.
+
+  The fix is simply to mark the live state as non-dirty/clean prior
+  performing the vstate restore.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35873.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29425'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29393'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29455'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29522'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.2957'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29507'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29488'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29451'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.2945'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29457'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29475'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00103'
+    scoring_system: epss
+    scoring_elements: '0.29456'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.3117'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31147'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.3113'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.3102'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31174'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.30982'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31127'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31144'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31134'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31164'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31124'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31103'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31104'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00142'
+    scoring_system: epss
+    scoring_elements: '0.31142'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+  - score: '0.00618'
+    scoring_system: epss
+    scoring_elements: '0.53572'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-35873.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-35873
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5b16d904e910183181b9d90efa957c787a8ac91b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c27fa53b858b4ee6552a719aa599c250cf98a586
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2281734
+    reference_type:
+    reference_id: 2281734
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-35873
+    reference_type:
+    reference_id: CVE-2024-35873
+  - url: https://usn.ubuntu.com/6893-1/
+    reference_type:
+    reference_id: USN-6893-1
+  - url: https://usn.ubuntu.com/6893-2/
+    reference_type:
+    reference_id: USN-6893-2
+  - url: https://usn.ubuntu.com/6893-3/
+    reference_type:
+    reference_id: USN-6893-3
+  - url: https://usn.ubuntu.com/6918-1/
+    reference_type:
+    reference_id: USN-6918-1

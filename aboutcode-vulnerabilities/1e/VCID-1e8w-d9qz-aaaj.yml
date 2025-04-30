@@ -1,0 +1,307 @@
+vulnerability_id: VCID-1e8w-d9qz-aaaj
+aliases:
+  - CVE-2021-46929
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  sctp: use call_rcu to free endpoint
+
+  This patch is to delay the endpoint free by calling call_rcu() to fix
+  another use-after-free issue in sctp_sock_dump():
+
+    BUG: KASAN: use-after-free in __lock_acquire+0x36d9/0x4c20
+    Call Trace:
+      __lock_acquire+0x36d9/0x4c20 kernel/locking/lockdep.c:3218
+      lock_acquire+0x1ed/0x520 kernel/locking/lockdep.c:3844
+      __raw_spin_lock_bh include/linux/spinlock_api_smp.h:135 [inline]
+      _raw_spin_lock_bh+0x31/0x40 kernel/locking/spinlock.c:168
+      spin_lock_bh include/linux/spinlock.h:334 [inline]
+      __lock_sock+0x203/0x350 net/core/sock.c:2253
+      lock_sock_nested+0xfe/0x120 net/core/sock.c:2774
+      lock_sock include/net/sock.h:1492 [inline]
+      sctp_sock_dump+0x122/0xb20 net/sctp/diag.c:324
+      sctp_for_each_transport+0x2b5/0x370 net/sctp/socket.c:5091
+      sctp_diag_dump+0x3ac/0x660 net/sctp/diag.c:527
+      __inet_diag_dump+0xa8/0x140 net/ipv4/inet_diag.c:1049
+      inet_diag_dump+0x9b/0x110 net/ipv4/inet_diag.c:1065
+      netlink_dump+0x606/0x1080 net/netlink/af_netlink.c:2244
+      __netlink_dump_start+0x59a/0x7c0 net/netlink/af_netlink.c:2352
+      netlink_dump_start include/linux/netlink.h:216 [inline]
+      inet_diag_handler_cmd+0x2ce/0x3f0 net/ipv4/inet_diag.c:1170
+      __sock_diag_cmd net/core/sock_diag.c:232 [inline]
+      sock_diag_rcv_msg+0x31d/0x410 net/core/sock_diag.c:263
+      netlink_rcv_skb+0x172/0x440 net/netlink/af_netlink.c:2477
+      sock_diag_rcv+0x2a/0x40 net/core/sock_diag.c:274
+
+  This issue occurs when asoc is peeled off and the old sk is freed after
+  getting it by asoc->base.sk and before calling lock_sock(sk).
+
+  To prevent the sk free, as a holder of the sk, ep should be alive when
+  calling lock_sock(). This patch uses call_rcu() and moves sock_put and
+  ep free into sctp_endpoint_destroy_rcu(), so that it's safe to try to
+  hold the ep under rcu_read_lock in sctp_transport_traverse_process().
+
+  If sctp_endpoint_hold() returns true, it means this ep is still alive
+  and we have held it and can continue to dump it; If it returns false,
+  it means this ep is dead and can be freed after rcu_read_unlock, and
+  we should skip it.
+
+  In sctp_sock_dump(), after locking the sk, if this ep is different from
+  tsp->asoc->ep, it means during this dumping, this asoc was peeled off
+  before calling lock_sock(), and the sk should be skipped; If this ep is
+  the same with tsp->asoc->ep, it means no peeloff happens on this asoc,
+  and due to lock_sock, no peeloff will happen either until release_sock.
+
+  Note that delaying endpoint free won't delay the port release, as the
+  port release happens in sctp_endpoint_destroy() before calling call_rcu().
+  Also, freeing endpoint by call_rcu() makes it safe to access the sk by
+  asoc->base.sk in sctp_assocs_seq_show() and sctp_rcv().
+
+  Thanks Jones to bring this issue up.
+
+  v1->v2:
+    - improve the changelog.
+    - add kfree(ep) into sctp_endpoint_destroy_rcu(), as Jakub noticed.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46929.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05124'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05115'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05119'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05108'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05100'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05073'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05058'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11993'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12072'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12035'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11872'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11998'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11834'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '0.00204'
+    scoring_system: epss
+    scoring_elements: '0.28481'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00377'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00383'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00379'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00378'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0029'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00295'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00297'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00296'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00291'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00385'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00386'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00387'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00388'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00384'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0038'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+  - score: '7.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46929
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-46929
+weaknesses:
+  - CWE-416
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-46929.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-46929
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-46929
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5ec7d18d1813a5bead0b495045606c93873aecbb
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/75799e71df1da11394740b43ae5686646179561d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/769d14abd35e0e153b5149c3e1e989a9d719e3ff
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/831de271452b87657fcf8d715ee20519b79caef5
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/8873140f95d4977bf37e4cf0d5c5e3f6e34cdd3e
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/af6e6e58f7ebf86b4e7201694b1e4f3a62cbc3ec
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2266357
+    reference_type:
+    reference_id: 2266357
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-46929
+    reference_type:
+    reference_id: CVE-2021-46929

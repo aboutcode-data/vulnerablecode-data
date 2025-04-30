@@ -1,0 +1,359 @@
+vulnerability_id: VCID-v4ad-t5pf-aaas
+aliases:
+  - CVE-2021-47072
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  btrfs: fix removed dentries still existing after log is synced
+
+  When we move one inode from one directory to another and both the inode
+  and its previous parent directory were logged before, we are not supposed
+  to have the dentry for the old parent if we have a power failure after the
+  log is synced. Only the new dentry is supposed to exist.
+
+  Generally this works correctly, however there is a scenario where this is
+  not currently working, because the old parent of the file/directory that
+  was moved is not authoritative for a range that includes the dir index and
+  dir item keys of the old dentry. This case is better explained with the
+  following example and reproducer:
+
+    # The test requires a very specific layout of keys and items in the
+    # fs/subvolume btree to trigger the bug. So we want to make sure that
+    # on whatever platform we are, we have the same leaf/node size.
+    #
+    # Currently in btrfs the node/leaf size can not be smaller than the page
+    # size (but it can be greater than the page size). So use the largest
+    # supported node/leaf size (64K).
+
+    $ mkfs.btrfs -f -n 65536 /dev/sdc
+    $ mount /dev/sdc /mnt
+
+    # "testdir" is inode 257.
+    $ mkdir /mnt/testdir
+    $ chmod 755 /mnt/testdir
+
+    # Create several empty files to have the directory "testdir" with its
+    # items spread over several leaves (7 in this case).
+    $ for ((i = 1; i <= 1200; i++)); do
+         echo -n > /mnt/testdir/file$i
+      done
+
+    # Create our test directory "dira", inode number 1458, which gets all
+    # its items in leaf 7.
+    #
+    # The BTRFS_DIR_ITEM_KEY item for inode 257 ("testdir") that points to
+    # the entry named "dira" is in leaf 2, while the BTRFS_DIR_INDEX_KEY
+    # item that points to that entry is in leaf 3.
+    #
+    # For this particular filesystem node size (64K), file count and file
+    # names, we endup with the directory entry items from inode 257 in
+    # leaves 2 and 3, as previously mentioned - what matters for triggering
+    # the bug exercised by this test case is that those items are not placed
+    # in leaf 1, they must be placed in a leaf different from the one
+    # containing the inode item for inode 257.
+    #
+    # The corresponding BTRFS_DIR_ITEM_KEY and BTRFS_DIR_INDEX_KEY items for
+    # the parent inode (257) are the following:
+    #
+    #    item 460 key (257 DIR_ITEM 3724298081) itemoff 48344 itemsize 34
+    #         location key (1458 INODE_ITEM 0) type DIR
+    #         transid 6 data_len 0 name_len 4
+    #         name: dira
+    #
+    # and:
+    #
+    #    item 771 key (257 DIR_INDEX 1202) itemoff 36673 itemsize 34
+    #         location key (1458 INODE_ITEM 0) type DIR
+    #         transid 6 data_len 0 name_len 4
+    #         name: dira
+
+    $ mkdir /mnt/testdir/dira
+
+    # Make sure everything done so far is durably persisted.
+    $ sync
+
+    # Now do a change to inode 257 ("testdir") that does not result in
+    # COWing leaves 2 and 3 - the leaves that contain the directory items
+    # pointing to inode 1458 (directory "dira").
+    #
+    # Changing permissions, the owner/group, updating or adding a xattr,
+    # etc, will not change (COW) leaves 2 and 3. So for the sake of
+    # simplicity change the permissions of inode 257, which results in
+    # updating its inode item and therefore change (COW) only leaf 1.
+
+    $ chmod 700 /mnt/testdir
+
+    # Now fsync directory inode 257.
+    #
+    # Since only the first leaf was changed/COWed, we log the inode item of
+    # inode 257 and only the dentries found in the first leaf, all have a
+    # key type of BTRFS_DIR_ITEM_KEY, and no keys of type
+    # BTRFS_DIR_INDEX_KEY, because they sort after the former type and none
+    # exist in the first leaf.
+    #
+    # We also log 3 items that represent ranges for dir items and dir
+    # indexes for which the log is authoritative:
+    #
+    # 1) a key of type BTRFS_DIR_LOG_ITEM_KEY, which indicates the log is
+    #    authoritative for all BTRFS_DIR_ITEM_KEY keys that have an offset
+    #    in the range [0, 2285968570] (the offset here is th
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47072.json
+  - score: '0.0001'
+    scoring_system: epss
+    scoring_elements: '0.00517'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01314'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.013'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01299'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01309'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01312'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01322'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01315'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01316'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01325'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01311'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.00966'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.00967'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.00971'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.00985'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.0098'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01295'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05481'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05472'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05442'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05464'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05476'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05494'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05478'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05486'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.23345'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-47072
+weaknesses:
+  - CWE-99
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47072.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47072
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/54a40fc3a1da21b52dbf19f72fdc27a2ec740760
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/6d0924c5b742036b4f20a0ffdf2b6cf3f963f5f6
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2267370
+    reference_type:
+    reference_id: 2267370
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.13:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.13:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47072
+    reference_type:
+    reference_id: CVE-2021-47072

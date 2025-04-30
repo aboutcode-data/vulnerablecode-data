@@ -1,0 +1,397 @@
+vulnerability_id: VCID-n4py-5tmt-aaas
+aliases:
+  - CVE-2024-40927
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  xhci: Handle TD clearing for multiple streams case
+
+  When multiple streams are in use, multiple TDs might be in flight when
+  an endpoint is stopped. We need to issue a Set TR Dequeue Pointer for
+  each, to ensure everything is reset properly and the caches cleared.
+  Change the logic so that any N>1 TDs found active for different streams
+  are deferred until after the first one is processed, calling
+  xhci_invalidate_cancelled_tds() again from xhci_handle_cmd_set_deq() to
+  queue another command until we are done with all of them. Also change
+  the error/"should never happen" paths to ensure we at least clear any
+  affected TDs, even if we can't issue a command to clear the hardware
+  cache, and complain loudly with an xhci_warn() if this ever happens.
+
+  This problem case dates back to commit e9df17eb1408 ("USB: xhci: Correct
+  assumptions about number of rings per endpoint.") early on in the XHCI
+  driver's life, when stream support was first added.
+  It was then identified but not fixed nor made into a warning in commit
+  674f8438c121 ("xhci: split handling halted endpoints into two steps"),
+  which added a FIXME comment for the problem case (without materially
+  changing the behavior as far as I can tell, though the new logic made
+  the problem more obvious).
+
+  Then later, in commit 94f339147fc3 ("xhci: Fix failure to give back some
+  cached cancelled URBs."), it was acknowledged again.
+
+  [Mathias: commit 94f339147fc3 ("xhci: Fix failure to give back some cached
+  cancelled URBs.") was a targeted regression fix to the previously mentioned
+  patch. Users reported issues with usb stuck after unmounting/disconnecting
+  UAS devices. This rolled back the TD clearing of multiple streams to its
+  original state.]
+
+  Apparently the commit author was aware of the problem (yet still chose
+  to submit it): It was still mentioned as a FIXME, an xhci_dbg() was
+  added to log the problem condition, and the remaining issue was mentioned
+  in the commit description. The choice of making the log type xhci_dbg()
+  for what is, at this point, a completely unhandled and known broken
+  condition is puzzling and unfortunate, as it guarantees that no actual
+  users would see the log in production, thereby making it nigh
+  undebuggable (indeed, even if you turn on DEBUG, the message doesn't
+  really hint at there being a problem at all).
+
+  It took me *months* of random xHC crashes to finally find a reliable
+  repro and be able to do a deep dive debug session, which could all have
+  been avoided had this unhandled, broken condition been actually reported
+  with a warning, as it should have been as a bug intentionally left in
+  unfixed (never mind that it shouldn't have been left in at all).
+
+  > Another fix to solve clearing the caches of all stream rings with
+  > cancelled TDs is needed, but not as urgent.
+
+  3 years after that statement and 14 years after the original bug was
+  introduced, I think it's finally time to fix it. And maybe next time
+  let's not leave bugs unfixed (that are actually worse than the original
+  bug), and let's actually get people to review kernel commits please.
+
+  Fixes xHC crashes and IOMMU faults with UAS devices when handling
+  errors/faults. Easiest repro is to use `hdparm` to mark an early sector
+  (e.g. 1024) on a disk as bad, then `cat /dev/sdX > /dev/null` in a loop.
+  At least in the case of JMicron controllers, the read errors end up
+  having to cancel two TDs (for two queued requests to different streams)
+  and the one that didn't get cleared properly ends up faulting the xHC
+  entirely when it tries to access DMA pages that have since been unmapped,
+  referred to by the stale TDs. This normally happens quickly (after two
+  or three loops). After this fix, I left the `cat` in a loop running
+  overnight and experienced no xHC failures, with all read errors
+  recovered properly. Repro'd and tested on an Apple M1 Mac Mini
+  (dwc3 host).
+
+  On systems without an IOMMU, this bug would instead silently corrupt
+  freed memory, making this a
+  ---truncated---
+severities:
+  - score: '6.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-40927.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34102'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34061'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34195'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34213'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34208'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34233'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00164'
+    scoring_system: epss
+    scoring_elements: '0.34199'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00182'
+    scoring_system: epss
+    scoring_elements: '0.36979'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41309'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37811'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37835'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37864'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.3786'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37832'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37797'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.37761'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41295'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41356'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41421'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41456'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41457'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41349'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41333'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41346'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41332'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41311'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41342'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00189'
+    scoring_system: epss
+    scoring_elements: '0.41335'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '0.00691'
+    scoring_system: epss
+    scoring_elements: '0.5605'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+  - score: '6.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:P/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-820
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-40927.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-40927
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-40927
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/26460c1afa311524f588e288a4941432f0de6228
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5ceac4402f5d975e5a01c806438eb4e554771577
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/61593dc413c3655e4328a351555235bc3089486a
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/633f72cb6124ecda97b641fbc119340bd88d51a9
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/949be4ec5835e0ccb3e2a8ab0e46179cb5512518
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2297511
+    reference_type:
+    reference_id: 2297511
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-40927
+    reference_type:
+    reference_id: CVE-2024-40927
+  - url: https://access.redhat.com/errata/RHSA-2024:5101
+    reference_type:
+    reference_id: RHSA-2024:5101
+  - url: https://access.redhat.com/errata/RHSA-2024:5102
+    reference_type:
+    reference_id: RHSA-2024:5102
+  - url: https://access.redhat.com/errata/RHSA-2024:6567
+    reference_type:
+    reference_id: RHSA-2024:6567
+  - url: https://usn.ubuntu.com/6999-1/
+    reference_type:
+    reference_id: USN-6999-1
+  - url: https://usn.ubuntu.com/6999-2/
+    reference_type:
+    reference_id: USN-6999-2
+  - url: https://usn.ubuntu.com/7004-1/
+    reference_type:
+    reference_id: USN-7004-1
+  - url: https://usn.ubuntu.com/7005-1/
+    reference_type:
+    reference_id: USN-7005-1
+  - url: https://usn.ubuntu.com/7005-2/
+    reference_type:
+    reference_id: USN-7005-2
+  - url: https://usn.ubuntu.com/7007-1/
+    reference_type:
+    reference_id: USN-7007-1
+  - url: https://usn.ubuntu.com/7007-2/
+    reference_type:
+    reference_id: USN-7007-2
+  - url: https://usn.ubuntu.com/7007-3/
+    reference_type:
+    reference_id: USN-7007-3
+  - url: https://usn.ubuntu.com/7008-1/
+    reference_type:
+    reference_id: USN-7008-1
+  - url: https://usn.ubuntu.com/7009-1/
+    reference_type:
+    reference_id: USN-7009-1
+  - url: https://usn.ubuntu.com/7009-2/
+    reference_type:
+    reference_id: USN-7009-2
+  - url: https://usn.ubuntu.com/7019-1/
+    reference_type:
+    reference_id: USN-7019-1
+  - url: https://usn.ubuntu.com/7029-1/
+    reference_type:
+    reference_id: USN-7029-1

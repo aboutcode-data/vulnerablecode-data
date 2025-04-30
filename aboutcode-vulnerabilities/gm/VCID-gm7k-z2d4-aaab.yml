@@ -1,0 +1,396 @@
+vulnerability_id: VCID-gm7k-z2d4-aaab
+aliases:
+  - CVE-2024-40642
+  - GHSA-q8f2-hxq5-cp4h
+summary: |
+  Absent Input Validation in BinaryHttpParser
+  ### Summary
+  `BinaryHttpParser` does not properly validate input values thus giving attackers almost complete control over the HTTP requests constructed from the parsed output. Attackers can abuse several issues individually to perform various injection attacks including HTTP request smuggling, desync attacks, HTTP header injections, request queue poisoning, caching attacks and Server Side Request Forgery (SSRF). Attacker could also combine several issues to create well-formed messages for other text-based protocols which may result in attacks beyond the HTTP protocol.
+
+  ### Details
+
+  **Path, Authority, Scheme**
+  The BinaryHttpParser class implements the readRequestHead method which performs most of the relevant parsing of the received request. The data structure prefixes values with a variable length integer value. The algorithm to create a variable length integer value is below:
+
+  ```
+  def encode_int(n):
+      if n < 64:
+          base = 0x00
+          l = 1
+      elif n in range(64, 16384):
+          base = 0x4000
+          l = 2
+      elif n in range(16384, 1073741824):
+          base = 0x80000000
+          l = 4
+      else:
+          base = 0xc000000000000000
+          l = 8
+     encoded = base | n
+     return encoded.to_bytes()
+  ```
+
+  The parsing code below first gets the lengths of the values from the prefixed variable length integer. After it has all of the lengths and calculates all of the indices, the parser casts the applicable slices of the ByteBuf to String. Finally, it passes these values into a new `DefaultBinaryHttpRequest` object where no further parsing or validation occurs.
+
+  ```
+  //netty-incubator-codec-ohttp/codec-bhttp/src/main/java/io/netty/incubator/codec/bhttp/BinaryHttpParser.java
+
+  public final class BinaryHttpParser {
+     ...
+      private static BinaryHttpRequest readRequestHead(ByteBuf in, boolean knownLength, int maxFieldSectionSize) {
+          ...
+          final long pathLength = getVariableLengthInteger(in, pathLengthIdx, pathLengthBytes);
+          ...
+          final int pathIdx = pathLengthIdx + pathLengthBytes;
+          ...
+  /*417*/ String method = in.toString(methodIdx, (int) methodLength, StandardCharsets.US_ASCII);
+  /*418*/ String scheme = in.toString(schemeIdx, (int) schemeLength, StandardCharsets.US_ASCII);
+  /*419*/ String authority = in.toString(authorityIdx, (int) authorityLength, StandardCharsets.US_ASCII);
+  /*420*/ String path = in.toString(pathIdx, (int) pathLength, StandardCharsets.US_ASCII);
+
+  /*422*/ BinaryHttpRequest request = new DefaultBinaryHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.valueOf(method),
+                  scheme, authority, path, headers);
+          in.skipBytes(sumBytes);
+          return request;
+      }
+     ...
+  }
+  ```
+
+  **Request Method**
+  On line 422 above, the parsed method value is passed into `HttpMethod.valueOf` method. The return value from this is passed to the `DefaultBinaryHttpRequest` constructor.
+
+  Below is the code for HttpMethod.valueOf:
+
+  ```
+      public static HttpMethod valueOf(String name) {
+          // fast-path
+          if (name == HttpMethod.GET.name()) {
+              return HttpMethod.GET;
+          }
+          if (name == HttpMethod.POST.name()) {
+              return HttpMethod.POST;
+          }
+          // "slow"-path
+          HttpMethod result = methodMap.get(name);
+          return result != null ? result : new HttpMethod(name);
+      }
+  ```
+
+  If the result of `methodMap.get` is not `null`, then a new arbitrary `HttpMethod` instance will be returned using the provided name value.
+
+  `methodMap` is an instance of type `EnumNameMap` which is also defined within the `HttpMethod` class:
+
+  ```
+          EnumNameMap(Node<T>... nodes) {
+              this.values = (Node[])(new Node[MathUtil.findNextPositivePowerOfTwo(nodes.length)]);
+              this.valuesMask = this.values.length - 1;
+              Node[] var2 = nodes;
+              int var3 = nodes.length;
+
+              for(int var4 = 0; var4 < var3; ++var4) {
+                  Node<T> node = var2[var4];
+                  int i = hashCode(node.key) & this.valuesMask;
+                  if (this.values[i] != null) {
+                      throw new IllegalArgumentException("index " + i + " collision between values: [" + this.values[i].key + ", " + node.key + ']');
+                  }
+
+                  this.values[i] = node;
+              }
+
+          }
+
+          T get(String name) {
+              Node<T> node = this.values[hashCode(name) & this.valuesMask];
+              return node != null && node.key.equals(name) ? node.value : null;
+          }
+  ```
+
+  Note that `EnumNameMap.get()` returns a boolean value, which is not `null`. Therefore, any arbitrary http verb used within a `BinaryHttpRequest` will yield a valid `HttpMethod` object. When the `HttpMethod` object is constructed, the name is checked for whitespace and similar characters. Therefore, we cannot perform complete injection attacks using the HTTP verb alone. However, when combined with the other input validation issues, such as that in the path field, we can construct somewhat arbitrary data blobs that satisfy text-based protocol message formats.
+
+  ### Impact
+  Method is partially validated while other values are not validated at all. Software that relies on netty to apply input validation for binary HTTP data may be vulnerable to various injection and protocol based attacks.
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52118'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52107'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52105'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52127'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52095'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.5207'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52025'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52087'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52076'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.5216'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52152'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52074'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00292'
+    scoring_system: epss
+    scoring_elements: '0.52132'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59286'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59253'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59282'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59301'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.5928'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59272'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.5931'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59328'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59349'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00422'
+    scoring_system: epss
+    scoring_elements: '0.59341'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00431'
+    scoring_system: epss
+    scoring_elements: '0.59777'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00431'
+    scoring_system: epss
+    scoring_elements: '0.59685'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.00431'
+    scoring_system: epss
+    scoring_elements: '0.59736'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.0047'
+    scoring_system: epss
+    scoring_elements: '0.61843'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.0047'
+    scoring_system: epss
+    scoring_elements: '0.6186'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: '0.01074'
+    scoring_system: epss
+    scoring_elements: '0.64394'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-q8f2-hxq5-cp4h
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp/commit/b687a0cf6ea1030232ea204d73bce82f2698e571
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp/commit/b687a0cf6ea1030232ea204d73bce82f2698e571
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp/security/advisories/GHSA-q8f2-hxq5-cp4h
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/netty/netty-incubator-codec-ohttp/security/advisories/GHSA-q8f2-hxq5-cp4h
+weaknesses:
+  - CWE-20
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-40642
+    reference_type:
+    reference_id:
+  - url: https://github.com/netty/netty-incubator-codec-ohttp
+    reference_type:
+    reference_id:
+  - url: https://github.com/netty/netty-incubator-codec-ohttp/commit/b687a0cf6ea1030232ea204d73bce82f2698e571
+    reference_type:
+    reference_id:
+  - url: https://github.com/netty/netty-incubator-codec-ohttp/security/advisories/GHSA-q8f2-hxq5-cp4h
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-40642
+    reference_type:
+    reference_id: CVE-2024-40642
+  - url: https://github.com/advisories/GHSA-q8f2-hxq5-cp4h
+    reference_type:
+    reference_id: GHSA-q8f2-hxq5-cp4h

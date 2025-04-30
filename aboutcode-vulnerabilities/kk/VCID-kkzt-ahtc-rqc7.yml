@@ -1,0 +1,49 @@
+vulnerability_id: VCID-kkzt-ahtc-rqc7
+aliases:
+  - GHSA-wrw7-89jp-8q8g
+summary: |
+  Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`
+  The `VariantStrIter::impl_get` function (called internally by implementations of the `Iterator` and `DoubleEndedIterator` traits for this type) was unsound, resulting in undefined behaviour.
+
+  An immutable reference `&p` to a `*mut libc::c_char` pointer initialized to `NULL` was passed as an argument to a C function that that mutates the pointer behind `&p` in-place (i.e. as an out-argument), which was unsound. After changes in recent versions of the Rust compiler, these unsound writes through `&p` now seem to be completely disregarded when building the `glib` crate with optimizations.
+
+  This subsequently caused all calls of `VariantStrIter::impl_get` to violate the safety requirements of the `std::ffi::CStr::from_ptr` function - which requires its argument to be a valid pointer to a C-style string - resulting in crashes due to `NULL` pointer dereferences.
+
+  This was fixed by passing the out-argument pointer explitly as `&mut p` instead of `&p`.
+
+  This issue has been present since this code was initially added in `glib` v0.15.0. The mismatch in mutability was likely missed (and not raised as an error by the compiler) because the C function wrapped by `VariantStrIter::impl_get` is variadic (`glib_sys::g_variant_get_child`), and the pointer in question is one of the variadic arguments.
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-wrw7-89jp-8q8g
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gtk-rs/gtk-rs-core
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/gtk-rs/gtk-rs-core/pull/1343
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2024-0429.html
+weaknesses: []
+references:
+  - url: https://github.com/gtk-rs/gtk-rs-core
+    reference_type:
+    reference_id:
+  - url: https://github.com/gtk-rs/gtk-rs-core/pull/1343
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2024-0429.html
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-wrw7-89jp-8q8g
+    reference_type:
+    reference_id: GHSA-wrw7-89jp-8q8g

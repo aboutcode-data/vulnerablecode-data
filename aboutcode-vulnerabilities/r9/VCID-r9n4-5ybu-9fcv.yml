@@ -1,0 +1,231 @@
+vulnerability_id: VCID-r9n4-5ybu-9fcv
+aliases:
+  - CVE-2025-22014
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  soc: qcom: pdr: Fix the potential deadlock
+
+  When some client process A call pdr_add_lookup() to add the look up for
+  the service and does schedule locator work, later a process B got a new
+  server packet indicating locator is up and call pdr_locator_new_server()
+  which eventually sets pdr->locator_init_complete to true which process A
+  sees and takes list lock and queries domain list but it will timeout due
+  to deadlock as the response will queued to the same qmi->wq and it is
+  ordered workqueue and process B is not able to complete new server
+  request work due to deadlock on list lock.
+
+  Fix it by removing the unnecessary list iteration as the list iteration
+  is already being done inside locator work, so avoid it here and just
+  call schedule_work() here.
+
+         Process A                        Process B
+
+                                       process_scheduled_works()
+  pdr_add_lookup()                      qmi_data_ready_work()
+   process_scheduled_works()             pdr_locator_new_server()
+                                           pdr->locator_init_complete=true;
+     pdr_locator_work()
+      mutex_lock(&pdr->list_lock);
+
+       pdr_locate_service()                  mutex_lock(&pdr->list_lock);
+
+        pdr_get_domain_list()
+         pr_err("PDR: %s get domain list
+                 txn wait failed: %d\n",
+                 req->service_name,
+                 ret);
+
+  Timeout error log due to deadlock:
+
+  "
+   PDR: tms/servreg get domain list txn wait failed: -110
+   PDR: service lookup for msm/adsp/sensor_pd:tms/servreg failed: -110
+  "
+
+  Thanks to Bjorn and Johan for letting me know that this commit also fixes
+  an audio regression when using the in-kernel pd-mapper as that makes it
+  easier to hit this race. [1]
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22014.json
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22014.json
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00603'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00011'
+    scoring_system: epss
+    scoring_elements: '0.00599'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01109'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01106'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01108'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01122'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01118'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01121'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.00825'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01125'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01138'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.0113'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01127'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01132'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.0112'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00012'
+    scoring_system: epss
+    scoring_elements: '0.01116'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02518'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02481'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02473'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-22014
+weaknesses:
+  - CWE-667
+  - CWE-833
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22014.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22014
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-22014
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/02612f1e4c34d94d6c8ee75bf7d254ed697e22d4
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/0a566a79aca9851fae140536e0fc5b0853c90a90
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2eeb03ad9f42dfece63051be2400af487ddb96d2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/72a222b6af10c2a05a5fad0029246229ed8912c2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/daba84612236de3ab39083e62c9e326a654ebd20
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f2bbfd50e95bc117360f0f59e629aa03d821ebd6
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f4489260f5713c94e1966e5f20445bff262876f4
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2358221
+    reference_type:
+    reference_id: 2358221
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.14:rc7:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.14:rc7:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22014
+    reference_type:
+    reference_id: CVE-2025-22014

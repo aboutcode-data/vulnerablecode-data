@@ -1,0 +1,450 @@
+vulnerability_id: VCID-zmyd-4fun-aaae
+aliases:
+  - CVE-2024-40627
+  - GHSA-5f5c-8rvc-j8wf
+summary: |
+  OpaMiddleware does not filter HTTP OPTIONS requests
+  ### Summary
+
+  HTTP `OPTIONS` requests are always allowed by `OpaMiddleware`, even when they lack authentication, and are passed through directly to the application.
+
+  The maintainer uncertain whether this should be classed as a "bug" or "security issue" – but is erring on the side of "security issue" as an application could reasonably assume OPA controls apply to *all* HTTP methods, and it bypasses more sophisticated policies.
+
+  ### Details
+
+  `OpaMiddleware` allows all HTTP `OPTIONS` requests without evaluating it against any policy:
+
+  https://github.com/busykoala/fastapi-opa/blob/6dd6f8c87e908fe080784a74707f016f1422b58a/fastapi_opa/opa/opa_middleware.py#L79-L80
+
+  If an application provides different responses to HTTP `OPTIONS` requests based on an entity existing (such as to indicate whether an entity is writable on a system level), an unauthenticated attacker could discover which entities exist within an application (CWE-204).
+
+  ### PoC
+
+  This toy application is based on the behaviour of an app[^1] which can use `fastapi-opa`. The app uses the `Allow` header of a HTTP `OPTIONS` to indicate whether an entity is writable on a "system" level, and returns HTTP 404 for unknown entities:
+
+  [^1]: an open source app, not written by me
+
+  ```python
+  # Run with: fastapi dev opa-poc.py --port 9999
+  from fastapi import FastAPI, Response, HTTPException
+  from fastapi_opa import OPAConfig, OPAMiddleware
+  from fastapi_opa.auth.auth_api_key import APIKeyAuthentication, APIKeyConfig
+
+  # OPA doesn't actually need to be running for this example
+  opa_host = "http://localhost:8181"
+  api_key_config = APIKeyConfig(
+      header_key = 'ApiKey',
+      api_key = 'secret-key',
+  )
+  api_key_auth = APIKeyAuthentication(api_key_config)
+  opa_config = OPAConfig(authentication=api_key_auth, opa_host=opa_host)
+
+  app = FastAPI()
+  app.add_middleware(OPAMiddleware, config=opa_config)
+
+  WRITABLE_ITEMS = {
+      1: True,
+      2: False,
+  }
+
+
+  @app.get("/")
+  async def root() -> dict:
+      return {"msg": "success"}
+
+  @app.get("/items/{item_id}")
+  async def read_item(item_id: int):
+      if item_id not in WRITABLE_ITEMS:
+          raise HTTPException(status_code=404)
+      return {"item_id": item_id}
+
+  @app.options("/items/{item_id}")
+  async def read_item_options(response: Response, item_id: int) -> dict:
+      if item_id not in WRITABLE_ITEMS:
+          raise HTTPException(status_code=404)
+
+      response.headers["Allow"] = "OPTIONS, GET" + (", POST" if WRITABLE_ITEMS[item_id] else "")
+      return {}
+  ```
+
+  As expected, HTTP `GET` requests fail consistently when unauthenticated, regardless of whether the entity exists, because `read_item()` is never executed:
+
+  ```
+  $ curl -i 'http://localhost:9999/items/1'
+  HTTP/1.1 401 Unauthorized
+  server: uvicorn
+  content-length: 26
+  content-type: application/json
+
+  {"message":"Unauthorized"}
+
+  $ curl -i 'http://localhost:9999/items/3'
+  HTTP/1.1 401 Unauthorized
+  server: uvicorn
+  content-length: 26
+  content-type: application/json
+
+  {"message":"Unauthorized"}
+  ```
+
+  However, HTTP `OPTIONS` requests are never authenticated by `OpaMiddleware`, so are passed straight through to `read_item_options()` and returned to unauthenticated users:
+
+  ```
+  $ curl -i -X OPTIONS 'http://localhost:9999/items/1'
+  HTTP/1.1 200 OK
+  server: uvicorn
+  content-length: 2
+  content-type: application/json
+  allow: OPTIONS, GET, POST
+
+  {}
+
+  $ curl -i -X OPTIONS 'http://localhost:9999/items/2'
+  HTTP/1.1 200 OK
+  server: uvicorn
+  content-length: 2
+  content-type: application/json
+  allow: OPTIONS, GET
+
+  {}
+
+  $ curl -i -X OPTIONS 'http://localhost:9999/items/3'
+  HTTP/1.1 404 Not Found
+  server: uvicorn
+  content-length: 22
+  content-type: application/json
+
+  {"detail":"Not Found"}
+  ```
+
+  ### Versions
+
+  ```
+  fastapi-opa==2.0.0
+  fastapi==0.111.0
+  ```
+severities:
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.16987'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17148'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17157'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17152'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.1713'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17113'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17103'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17112'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17141'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17158'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.1716'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.17085'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00054'
+    scoring_system: epss
+    scoring_elements: '0.16912'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00198'
+    scoring_system: epss
+    scoring_elements: '0.39024'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00198'
+    scoring_system: epss
+    scoring_elements: '0.38989'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45035'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45044'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45054'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45068'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.4505'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45013'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45036'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00244'
+    scoring_system: epss
+    scoring_elements: '0.45056'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00272'
+    scoring_system: epss
+    scoring_elements: '0.4792'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00272'
+    scoring_system: epss
+    scoring_elements: '0.47927'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00272'
+    scoring_system: epss
+    scoring_elements: '0.47906'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00272'
+    scoring_system: epss
+    scoring_elements: '0.4789'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00272'
+    scoring_system: epss
+    scoring_elements: '0.47875'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: '0.00403'
+    scoring_system: epss
+    scoring_elements: '0.44048'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-5f5c-8rvc-j8wf
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/blob/6dd6f8c87e908fe080784a74707f016f1422b58a/fastapi_opa/opa/opa_middleware.py#L79-L80
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/blob/6dd6f8c87e908fe080784a74707f016f1422b58a/fastapi_opa/opa/opa_middleware.py#L79-L80
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/commit/9458845a6f6f414c0b79587fae83d7f14d74dfb4
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/commit/9458845a6f6f414c0b79587fae83d7f14d74dfb4
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/commit/9588109ff651f7ffc92687129c4956126443fb8c
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/commit/9588109ff651f7ffc92687129c4956126443fb8c
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/security/advisories/GHSA-5f5c-8rvc-j8wf
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/busykoala/fastapi-opa/security/advisories/GHSA-5f5c-8rvc-j8wf
+  - score: '5.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-40627
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-40627
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-204
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-40627
+    reference_type:
+    reference_id:
+  - url: https://github.com/busykoala/fastapi-opa
+    reference_type:
+    reference_id:
+  - url: https://github.com/busykoala/fastapi-opa/blob/6dd6f8c87e908fe080784a74707f016f1422b58a/fastapi_opa/opa/opa_middleware.py#L79-L80
+    reference_type:
+    reference_id:
+  - url: https://github.com/busykoala/fastapi-opa/commit/9458845a6f6f414c0b79587fae83d7f14d74dfb4
+    reference_type:
+    reference_id:
+  - url: https://github.com/busykoala/fastapi-opa/commit/9588109ff651f7ffc92687129c4956126443fb8c
+    reference_type:
+    reference_id:
+  - url: https://github.com/busykoala/fastapi-opa/security/advisories/GHSA-5f5c-8rvc-j8wf
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-40627
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-5f5c-8rvc-j8wf
+    reference_type:
+    reference_id: GHSA-5f5c-8rvc-j8wf

@@ -1,0 +1,284 @@
+vulnerability_id: VCID-h7zx-6j6k-aaam
+aliases:
+  - CVE-2021-47391
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\nRDMA/cma: Ensure\
+  \ rdma_addr_cancel() happens before issuing more requests\n\nThe FSM can run in a circle allowing\
+  \ rdma_resolve_ip() to be called twice\non the same id_priv. While this cannot happen without\
+  \ going through the\nwork, it violates the invariant that the same address resolution\nbackground\
+  \ request cannot be active twice.\n\n       CPU 1                                  CPU 2\n\
+  \nrdma_resolve_addr():\n  RDMA_CM_IDLE -> RDMA_CM_ADDR_QUERY\n  rdma_resolve_ip(addr_handler)\
+  \  #1\n\n\t\t\t process_one_req(): for #1\n                          addr_handler():\n   \
+  \                         RDMA_CM_ADDR_QUERY -> RDMA_CM_ADDR_BOUND\n                     \
+  \       mutex_unlock(&id_priv->handler_mutex);\n                            [.. handler still\
+  \ running ..]\n\nrdma_resolve_addr():\n  RDMA_CM_ADDR_BOUND -> RDMA_CM_ADDR_QUERY\n  rdma_resolve_ip(addr_handler)\n\
+  \    !! two requests are now on the req_list\n\nrdma_destroy_id():\n destroy_id_handler_unlock():\n\
+  \  _destroy_id():\n   cma_cancel_operation():\n    rdma_addr_cancel()\n\n                \
+  \          // process_one_req() self removes it\n\t\t          spin_lock_bh(&lock);\n    \
+  \                       cancel_delayed_work(&req->work);\n\t                   if (!list_empty(&req->list))\
+  \ == true\n\n      ! rdma_addr_cancel() returns after process_on_req #1 is done\n\n   kfree(id_priv)\n\
+  \n\t\t\t process_one_req(): for #2\n                          addr_handler():\n\t        \
+  \            mutex_lock(&id_priv->handler_mutex);\n                            !! Use after\
+  \ free on id_priv\n\nrdma_addr_cancel() expects there to be one req on the list and only\n\
+  cancels the first one. The self-removal behavior of the work only happens\nafter the handler\
+  \ has returned. This yields a situations where the\nreq_list can have two reqs for the same\
+  \ \"handle\" but rdma_addr_cancel()\nonly cancels the first one.\n\nThe second req remains\
+  \ active beyond rdma_destroy_id() and will\nuse-after-free id_priv once it inevitably triggers.\n\
+  \nFix this by remembering if the id_priv has called rdma_resolve_ip() and\nalways cancel before\
+  \ calling it again. This ensures the req_list never\ngets more than one item in it and doesn't\
+  \ cost anything in the normal flow\nthat never uses this strange error path."
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47391.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.236'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.19931'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23609'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23601'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.19883'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20039'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20056'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20072'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20071'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20023'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20002'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20019'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20033'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20065'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.20034'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.19982'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23471'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.2353'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23583'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23631'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.2363'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23602'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23592'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23582'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23584'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00076'
+    scoring_system: epss
+    scoring_elements: '0.23615'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '0.00321'
+    scoring_system: epss
+    scoring_elements: '0.38666'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-362
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47391.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47391
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-47391
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/03d884671572af8bcfbc9e63944c1021efce7589
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/305d568b72f17f674155a2a8275f865f207b3808
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9a085fa9b7d644a234465091e038c1911e1a4f2a
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2282349
+    reference_type:
+    reference_id: 2282349
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47391
+    reference_type:
+    reference_id: CVE-2021-47391

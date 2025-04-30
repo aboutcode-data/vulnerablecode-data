@@ -1,0 +1,123 @@
+vulnerability_id: VCID-wvkr-gjue-5ya5
+aliases:
+  - CVE-2025-22113
+summary: "In the Linux kernel, the following vulnerability has been resolved:\n\next4: avoid\
+  \ journaling sb update on error if journal is destroying\n\nPresently we always BUG_ON if\
+  \ trying to start a transaction on a journal marked\nwith JBD2_UNMOUNT, since this should\
+  \ never happen. However, while ltp running\nstress tests, it was observed that in case of\
+  \ some error handling paths, it is\npossible for update_super_work to start a transaction\
+  \ after the journal is\ndestroyed eg:\n\n(umount)\next4_kill_sb\n  kill_block_super\n    generic_shutdown_super\n\
+  \      sync_filesystem /* commits all txns */\n      evict_inodes\n        /* might start\
+  \ a new txn */\n      ext4_put_super\n\tflush_work(&sbi->s_sb_upd_work) /* flush the workqueue\
+  \ */\n        jbd2_journal_destroy\n          journal_kill_thread\n            journal->j_flags\
+  \ |= JBD2_UNMOUNT;\n          jbd2_journal_commit_transaction\n            jbd2_journal_get_descriptor_buffer\n\
+  \              jbd2_journal_bmap\n                ext4_journal_bmap\n                  ext4_map_blocks\n\
+  \                    ...\n                    ext4_inode_error\n                      ext4_handle_error\n\
+  \                        schedule_work(&sbi->s_sb_upd_work)\n\n                          \
+  \                     /* work queue kicks in */\n                                        \
+  \       update_super_work\n                                                 jbd2_journal_start\n\
+  \                                                   start_this_handle\n                  \
+  \                                   BUG_ON(journal->j_flags &\n                          \
+  \                                  JBD2_UNMOUNT)\n\nHence, introduce a new mount flag to indicate\
+  \ journal is destroying and only do\na journaled (and deferred) update of sb if this flag\
+  \ is not set. Otherwise, just\nfallback to an un-journaled commit.\n\nFurther, in the journal\
+  \ destroy path, we have the following sequence:\n\n  1. Set mount flag indicating journal\
+  \ is destroying\n  2. force a commit and wait for it\n  3. flush pending sb updates\n\nThis\
+  \ sequence is important as it ensures that, after this point, there is no sb\nupdate that\
+  \ might be journaled so it is safe to update the sb outside the\njournal. (To avoid race discussed\
+  \ in 2d01ddc86606)\n\nAlso, we don't need a similar check in ext4_grp_locked_error since it\
+  \ is only\ncalled from mballoc and AFAICT it would be always valid to schedule work here."
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22113.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03277'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03268'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03279'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03264'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03263'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04937'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04901'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04923'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04919'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04929'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04931'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04944'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+  - score: '4.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22113.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22113
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ce2f26e73783b4a7c46a86e3af5b5c8de0971790
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/db05767b5bc307143d99fe2afd8c43af58d2ebef
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360212
+    reference_type:
+    reference_id: 2360212
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22113
+    reference_type:
+    reference_id: CVE-2025-22113

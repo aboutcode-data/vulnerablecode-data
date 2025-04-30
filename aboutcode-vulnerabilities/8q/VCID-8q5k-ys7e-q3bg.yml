@@ -1,0 +1,330 @@
+vulnerability_id: VCID-8q5k-ys7e-q3bg
+aliases:
+  - CVE-2022-48925
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  RDMA/cma: Do not change route.addr.src_addr outside state checks
+
+  If the state is not idle then resolve_prepare_src() should immediately
+  fail and no change to global state should happen. However, it
+  unconditionally overwrites the src_addr trying to build a temporary any
+  address.
+
+  For instance if the state is already RDMA_CM_LISTEN then this will corrupt
+  the src_addr and would cause the test in cma_cancel_operation():
+
+             if (cma_any_addr(cma_src_addr(id_priv)) && !id_priv->cma_dev)
+
+  Which would manifest as this trace from syzkaller:
+
+    BUG: KASAN: use-after-free in __list_add_valid+0x93/0xa0 lib/list_debug.c:26
+    Read of size 8 at addr ffff8881546491e0 by task syz-executor.1/32204
+
+    CPU: 1 PID: 32204 Comm: syz-executor.1 Not tainted 5.12.0-rc8-syzkaller #0
+    Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
+    Call Trace:
+     __dump_stack lib/dump_stack.c:79 [inline]
+     dump_stack+0x141/0x1d7 lib/dump_stack.c:120
+     print_address_description.constprop.0.cold+0x5b/0x2f8 mm/kasan/report.c:232
+     __kasan_report mm/kasan/report.c:399 [inline]
+     kasan_report.cold+0x7c/0xd8 mm/kasan/report.c:416
+     __list_add_valid+0x93/0xa0 lib/list_debug.c:26
+     __list_add include/linux/list.h:67 [inline]
+     list_add_tail include/linux/list.h:100 [inline]
+     cma_listen_on_all drivers/infiniband/core/cma.c:2557 [inline]
+     rdma_listen+0x787/0xe00 drivers/infiniband/core/cma.c:3751
+     ucma_listen+0x16a/0x210 drivers/infiniband/core/ucma.c:1102
+     ucma_write+0x259/0x350 drivers/infiniband/core/ucma.c:1732
+     vfs_write+0x28e/0xa30 fs/read_write.c:603
+     ksys_write+0x1ee/0x250 fs/read_write.c:658
+     do_syscall_64+0x2d/0x70 arch/x86/entry/common.c:46
+     entry_SYSCALL_64_after_hwframe+0x44/0xae
+
+  This is indicating that an rdma_id_private was destroyed without doing
+  cma_cancel_listens().
+
+  Instead of trying to re-use the src_addr memory to indirectly create an
+  any address derived from the dst build one explicitly on the stack and
+  bind to that as any other normal flow would do. rdma_bind_addr() will copy
+  it over the src_addr once it knows the state is valid.
+
+  This is similar to commit bc0bdc5afaa7 ("RDMA/cma: Do not change
+  route.addr.src_addr.ss_family")
+severities:
+  - score: '7.8'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48925.json
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07006'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07024'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07046'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0706'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07049'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06955'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05345'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05366'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05356'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05352'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05343'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.05315'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06927'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07071'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07127'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06961'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06954'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06962'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.06968'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0696'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05065'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05124'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05115'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05119'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05108'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05100'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05091'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05073'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05058'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12615'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12603'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12613'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12633'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12594'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12558'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12553'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12386'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.12411'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '0.00197'
+    scoring_system: epss
+    scoring_elements: '0.27864'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '7.8'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2022-48925
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2022-48925
+weaknesses:
+  - CWE-416
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-48925.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-48925
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-48925
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/00265efbd3e5705038c9492a434fda8cf960c8a2
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/22e9f71072fa605cbf033158db58e0790101928d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/5b1cef5798b4fd6e4fd5522e7b8a26248beeacaa
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d350724795c7a48b05bf921d94699fbfecf7da0b
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2307178
+    reference_type:
+    reference_id: 2307178
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2022-48925
+    reference_type:
+    reference_id: CVE-2022-48925

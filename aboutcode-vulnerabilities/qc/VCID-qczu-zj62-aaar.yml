@@ -1,0 +1,330 @@
+vulnerability_id: VCID-qczu-zj62-aaar
+aliases:
+  - CVE-2021-47531
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  drm/msm: Fix mmap to include VM_IO and VM_DONTDUMP
+
+  In commit 510410bfc034 ("drm/msm: Implement mmap as GEM object
+  function") we switched to a new/cleaner method of doing things. That's
+  good, but we missed a little bit.
+
+  Before that commit, we used to _first_ run through the
+  drm_gem_mmap_obj() case where `obj->funcs->mmap()` was NULL. That meant
+  that we ran:
+
+    vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP;
+    vma->vm_page_prot = pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
+    vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
+
+  ...and _then_ we modified those mappings with our own. Now that
+  `obj->funcs->mmap()` is no longer NULL we don't run the default
+  code. It looks like the fact that the vm_flags got VM_IO / VM_DONTDUMP
+  was important because we're now getting crashes on Chromebooks that
+  use ARC++ while logging out. Specifically a crash that looks like this
+  (this is on a 5.10 kernel w/ relevant backports but also seen on a
+  5.15 kernel):
+
+    Unable to handle kernel paging request at virtual address ffffffc008000000
+    Mem abort info:
+      ESR = 0x96000006
+      EC = 0x25: DABT (current EL), IL = 32 bits
+      SET = 0, FnV = 0
+      EA = 0, S1PTW = 0
+    Data abort info:
+      ISV = 0, ISS = 0x00000006
+      CM = 0, WnR = 0
+    swapper pgtable: 4k pages, 39-bit VAs, pgdp=000000008293d000
+    [ffffffc008000000] pgd=00000001002b3003, p4d=00000001002b3003,
+                       pud=00000001002b3003, pmd=0000000000000000
+    Internal error: Oops: 96000006 [#1] PREEMPT SMP
+    [...]
+    CPU: 7 PID: 15734 Comm: crash_dump64 Tainted: G W 5.10.67 #1 [...]
+    Hardware name: Qualcomm Technologies, Inc. sc7280 IDP SKU2 platform (DT)
+    pstate: 80400009 (Nzcv daif +PAN -UAO -TCO BTYPE=--)
+    pc : __arch_copy_to_user+0xc0/0x30c
+    lr : copyout+0xac/0x14c
+    [...]
+    Call trace:
+     __arch_copy_to_user+0xc0/0x30c
+     copy_page_to_iter+0x1a0/0x294
+     process_vm_rw_core+0x240/0x408
+     process_vm_rw+0x110/0x16c
+     __arm64_sys_process_vm_readv+0x30/0x3c
+     el0_svc_common+0xf8/0x250
+     do_el0_svc+0x30/0x80
+     el0_svc+0x10/0x1c
+     el0_sync_handler+0x78/0x108
+     el0_sync+0x184/0x1c0
+    Code: f8408423 f80008c3 910020c6 36100082 (b8404423)
+
+  Let's add the two flags back in.
+
+  While we're at it, the fact that we aren't running the default means
+  that we _don't_ need to clear out VM_PFNMAP, so remove that and save
+  an instruction.
+
+  NOTE: it was confirmed that VM_IO was the important flag to fix the
+  problem I was seeing, but adding back VM_DONTDUMP seems like a sane
+  thing to do so I'm doing that too.
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47531.json
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47531.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17962'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14732'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17968'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17965'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14687'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14849'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14859'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.1488'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14915'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14898'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14885'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14894'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14954'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14958'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14929'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14905'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.14856'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17735'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17809'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17904'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17981'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17971'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17952'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17924'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17917'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17928'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.17941'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '0.0025'
+    scoring_system: epss
+    scoring_elements: '0.3279'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-824
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47531.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47531
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3466d9e217b337bf473ee629c608e53f9f3ab786
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/8e2b7fe5e8a4be5e571561d9afcfbd92097288ba
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2283420
+    reference_type:
+    reference_id: 2283420
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47531
+    reference_type:
+    reference_id: CVE-2021-47531

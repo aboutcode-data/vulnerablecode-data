@@ -1,0 +1,77 @@
+vulnerability_id: VCID-sz6f-trt7-aaam
+aliases:
+  - GHSA-whpx-q3rq-w8jc
+  - GMS-2022-5773
+summary: |
+  Hardening of TypedArrays with non-canonical numeric property names in SES
+  ### Impact
+  _What kind of vulnerability is it? Who is impacted?_
+
+  In Hardened JavaScript, programs can `harden` objects to safely share objects with co-tenant programs without risk of these other programs tampering with their API surface. Hardening does not guarantee that objects are pure or immutable, so a hardened `Map`, for example is superficially tamper-proof, but any party holding a reference to the object can both read and write its contents. Based on this precedent, and because `TypedArray` instances cannot be frozen with `Object.isFrozen`, `harden` does not `freeze` `TypedArrays` and instead makes them non-extensible and makes all non-indexed properties non-writable and non-configurable. This is consistent with the treatment of `Map` because the indexed properties represent mutable content and non-indexed properties represent the API.
+
+  Due to a defect in `harden`, properties that have names that parse as numbers but are not the same as the canonical representation of those numbers, as in `"+0"` and `""` which are both equivalent to their canonical number `"0"`, remain writable after hardening.
+
+  Any program treating one of these properties as part of its API and relying on `harden` to prevent modifications would be vulnerable to an API pollution attack, affecting only instances shared by mutually suspicious parties.
+
+  Unlike a `Map`, a hardened `TypedArray` can only have numbers for content. Any program that is sharing hardened `TypedArrays` between co-tentant programs and relying on harden to only allow these programs to communicate exclusively by changing numbers within the bounds of the TypedArray, may inadvertently have arranged for a mechanism for a pair of third-parties to communicate arbitrary objects on these other properties.
+
+  ### Patches
+  _Has the problem been patched? What versions should users upgrade to?_
+
+  SES version 0.16.0 patches this issue, causing `harden` to recognize properties with non-canonical numeric representations and ensuring that these properties are non-configurable.
+
+  ### Workarounds
+  _Is there a way for users to fix or remediate the vulnerability without upgrading?_
+
+  Users should avoid sharing `TypedArrays` between co-tenant programs and instead create wrapper objects that produce a read-only view of the underlying data. We allow `harden` to succeed for `TypedArrays` because the treatment is in fact consistent with the behavior of collections like `Map`, but all collections shared between co-tentant programs should probably be attenuated to either read- or write-only facets and probably close over only part of the content of the collection. However, the motivation for allowing `TypedArrays` to be hardened in practice is to allow certain legacy modules to function under Hardened JavaScript with LavaMoat, since they export `TypedArrays`, even though they would ideally export read-only facets of these.
+
+  ### References
+  _Are there any links users can visit to find out more?_
+
+  Not at this time.
+
+  ### For more information
+  If you have any questions or comments about this advisory:
+  * Email us at [security@agoric.com](mailto:security@agoric.com)
+severities:
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-whpx-q3rq-w8jc
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/endojs/endo
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/endojs/endo
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/endojs/endo/commit/88cab0be4cf816dc578f2ff441fd9bcda0aa5cf5
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/endojs/endo/security/advisories/GHSA-whpx-q3rq-w8jc
+weaknesses:
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://github.com/endojs/endo
+    reference_type:
+    reference_id:
+  - url: https://github.com/endojs/endo/commit/88cab0be4cf816dc578f2ff441fd9bcda0aa5cf5
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-whpx-q3rq-w8jc
+    reference_type:
+    reference_id: GHSA-whpx-q3rq-w8jc
+  - url: https://github.com/endojs/endo/security/advisories/GHSA-whpx-q3rq-w8jc
+    reference_type:
+    reference_id: GHSA-whpx-q3rq-w8jc

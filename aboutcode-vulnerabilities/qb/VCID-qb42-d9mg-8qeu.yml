@@ -1,0 +1,380 @@
+vulnerability_id: VCID-qb42-d9mg-8qeu
+aliases:
+  - CVE-2024-47061
+  - GHSA-73rg-f94j-xvhx
+summary: "Plate allows arbitrary DOM attributes in element.attributes and leaf.attributes\n\
+  ### Impact\nOne longstanding feature of Plate is the ability to add custom DOM attributes\
+  \ to any element or leaf using the `attributes` property. These attributes are passed to the\
+  \ node component using the `nodeProps` prop.\n\nNote: The `attributes` prop that is typically\
+  \ rendered alongside `nodeProps` is unrelated.\n\n```ts\n[{\n  type: 'p',\n  attributes: {\
+  \ 'data-my-attribute': 'This will be rendered on the paragraph element' },\n  children: [{\n\
+  \    bold: true,\n    attributes: { 'data-my-attribute': 'This will be rendered on the bold\
+  \ leaf element' },\n    text: 'Bold text',\n  }],\n}]\n```\n\n```tsx\nconst ParagraphElement\
+  \ = ({ attributes, nodeProps, children }) => (\n  <p\n    {...attributes}\n    {...nodeProps}\
+  \ // Arbitrary DOM attributes are injected here\n  >\n    {children}\n  </p>\n);\n\nconst\
+  \ BoldLeaf = ({ attributes, nodeProps, children }) => (\n  <strong\n    {...attributes}\n\
+  \    {...nodeProps} // Arbitrary DOM attributes are injected here\n  >\n    {children}\n \
+  \ </strong>\n);\n```\n\nIt has come to our attention that this feature can be used for malicious\
+  \ purposes, including cross-site scripting (XSS) and information exposure (specifically, users'\
+  \ IP addresses and whether or not they have opened a malicious document).\n\nNote that the\
+  \ risk of information exposure via `attributes` is only relevant to applications in which\
+  \ web requests to arbitrary URLs are not ordinarily allowed. Plate editors that allow users\
+  \ to embed images from arbitrary URLs, for example, already carry the risk of leaking users'\
+  \ IP addresses to third parties.\n\nAll Plate editors using an affected version of `@udecode/plate-core`\
+  \ are vulnerable to these information exposure attacks via the `style` attribute and other\
+  \ attributes that can cause web requests to be sent. \n\nIn addition, whether or not a Plate\
+  \ editor is vulnerable to cross-site scripting attacks using `attributes` depends on a number\
+  \ of factors. The most likely DOM attributes to be vulnerable are `href` and `src` on links\
+  \ and iframes respectively. Any component that spreads `{...nodeProps}` onto an `<a>` or `<iframe>`\
+  \ element and does not later override `href` or `src` will be vulnerable to XSS.\n\n```tsx\n\
+  <a\n  href={sanitizedHref}\n  {...attributes}\n  {...nodeProps} // Definitely vulnerable to\
+  \ XSS since `href` can be overridden\n>\n```\n\n```tsx\n<a\n  {...attributes}\n  {...nodeProps}\
+  \ // Probably not vulnerable to XSS via `href`\n  href={sanitizedHref}\n>\n```\n\n```tsx\n\
+  <a\n  {...attributes}\n  {...nodeProps} // May be vulnerable to XSS via `href` if `href` is\
+  \ sometimes omitted from `sanitizedLinkProps`\n  {...sanitizedLinkProps}\n>\n```\n\nReact\
+  \ does not allow passing a string to event handler props like `onClick`, so these are unlikely\
+  \ (but not impossible) to be vulnerable.\n\nThe attack surface is larger for users running\
+  \ older browsers, which may be vulnerable to XSS in DOM attributes that are less dangerous\
+  \ (although still vulnerable to information exposure) in modern browsers such as `style` or\
+  \ `background`.\n\nPotential attack vectors for delivering malicious Slate content to users\
+  \ include:\n\n- Opening a malicious document stored on the server\n- Pasting a malicious Slate\
+  \ fragment into a document\n- Receiving malicious Slate operations on a collaborative document\n\
+  \n### Patches\nIn patched versions of Plate, we have disabled `element.attributes` and `leaf.attributes`\
+  \ for most attribute names by default, with some exceptions including  `target`, `alt`, `width`,\
+  \ `height`, `colspan` and `rowspan` on the link, image, video, table cell and table header\
+  \ cell plugins.\n\nIf this is a breaking change for you, you can selectively re-enable `attributes`\
+  \ for certain plugins as follows. Please carefully research and assess the security implications\
+  \ of any attribute you allow, as even seemingly innocuous attributes such as `style` can be\
+  \ used maliciously.\n\n#### Plate >= 37\n\nFor custom plugins, specify the list of allowed\
+  \ attribute names in the `node.dangerouslyAllowAttributes` plugin configuration option.\n\n\
+  ```ts\nconst ImagePlugin = createPlatePlugin({\n  key: 'image',\n  node: {\n    isElement:\
+  \ true,\n    isVoid: true,\n    dangerouslyAllowAttributes: ['alt'],\n  },\n});\n```\n\nTo\
+  \ modify an existing plugin, use the `extend` method.\n\n```ts\nconst MyImagePlugin = ImagePlugin.extend({\n\
+  \  node: {\n    dangerouslyAllowAttributes: ['alt'],\n  },\n});\n```\n\n#### Plate < 37\n\n\
+  Note that the patch has been backported to versions `@udecode/plate-core@21.5.1` and `@udecode/plate-core@36.5.9`\
+  \ only.\n\nFor custom plugins, specify the list of allowed attribute names in the `dangerouslyAllowAttributes`\
+  \ plugin configuration option.\n\n```ts\nconst createImagePlugin = createPluginFactory({\n\
+  \  key: 'image',\n  isElement: true,\n  isVoid: true,\n  dangerouslyAllowAttributes: ['alt'],\n\
+  });\n```\n\nTo modify an existing plugin, pass `dangerouslyAllowAttributes` to the plugin\
+  \ factory.\n\n```ts\ncreateImagePlugin({\n  dangerouslyAllowAttributes: ['alt'],\n});\n```\n\
+  \n### Workarounds\n\nIf you are unable to upgrade to any of the patched versions, you should\
+  \ use a tool like [`patch-package`](https://www.npmjs.com/package/patch-package) or [`yarn\
+  \ patch`](https://yarnpkg.com/cli/patch) to remove the logic from `@udecode/plate-core` that\
+  \ adds `attributes` to `nodeProps`.\n\nThis logic can be found in the `getRenderNodeProps`\
+  \ function and looks something like this. The entire `if` statment can safely be removed.\n\
+  \n```ts\n  if (!newProps.nodeProps && attributes) {\n    newProps.nodeProps = attributes;\n\
+  \  }\n```\n\nAfter applying the patch, be sure to test its effectiveness by rendering a Slate\
+  \ value containing an `attributes` property on some element.\n\n```ts\n[{\n  type: 'p',\n\
+  \  attributes: { 'data-vulnerable': true },\n  children: [{ text: 'My paragraph' }],\n}]\n\
+  ```\n\nIf the patch was successful, the `data-vulnerable=\"true\"` attribute should not be\
+  \ present on any DOM element when the Plate editor is rendered in the browser."
+severities:
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00146'
+    scoring_system: epss
+    scoring_elements: '0.36181'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38575'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38583'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38579'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38581'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38589'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38674'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.3863'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38562'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00165'
+    scoring_system: epss
+    scoring_elements: '0.38678'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35877'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35802'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35767'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35893'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35909'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35908'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35934'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35902'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35863'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35876'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.3594'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35942'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00175'
+    scoring_system: epss
+    scoring_elements: '0.35856'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.40852'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.4089'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00185'
+    scoring_system: epss
+    scoring_elements: '0.4091'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.40035'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-73rg-f94j-xvhx
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/udecode/plate
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/udecode/plate
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/udecode/plate/commit/16df6074edac22d56c60e0283eae0740230401c9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/udecode/plate/commit/16df6074edac22d56c60e0283eae0740230401c9
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://github.com/udecode/plate/security/advisories/GHSA-73rg-f94j-xvhx
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/udecode/plate/security/advisories/GHSA-73rg-f94j-xvhx
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47061
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-47061
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://www.npmjs.com/package/patch-package
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://www.npmjs.com/package/patch-package
+  - score: '8.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    published_at: None
+    url: https://yarnpkg.com/cli/patch
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://yarnpkg.com/cli/patch
+weaknesses:
+  - CWE-79
+  - CWE-937
+  - CWE-1035
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-47061
+    reference_type:
+    reference_id:
+  - url: https://github.com/udecode/plate
+    reference_type:
+    reference_id:
+  - url: https://github.com/udecode/plate/commit/16df6074edac22d56c60e0283eae0740230401c9
+    reference_type:
+    reference_id:
+  - url: https://github.com/udecode/plate/security/advisories/GHSA-73rg-f94j-xvhx
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-47061
+    reference_type:
+    reference_id:
+  - url: https://www.npmjs.com/package/patch-package
+    reference_type:
+    reference_id:
+  - url: https://yarnpkg.com/cli/patch
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-73rg-f94j-xvhx
+    reference_type:
+    reference_id: GHSA-73rg-f94j-xvhx

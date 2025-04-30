@@ -1,0 +1,78 @@
+vulnerability_id: VCID-c8s8-he5t-aaab
+aliases:
+  - GHSA-83gg-pwxf-jr89
+summary: |
+  `array!` macro is unsound in presence of traits that implement methods it calls internally
+  Affected versions of this crate called some methods using auto-ref. The affected code looked like this.
+
+  ```rust
+  let mut arr = $crate::__core::mem::MaybeUninit::uninit();
+  let mut vec = $crate::__ArrayVec::<T>::new(arr.as_mut_ptr() as *mut T);
+  ```
+
+  In this case, the problem is that `as_mut_ptr` is a method of `&mut MaybeUninit`, not `MaybeUninit`. This made it possible for traits to hijack the method calls in order to cause unsoundness.
+
+  ```rust
+  trait AsMutPtr<T> {
+      fn as_mut_ptr(&self) -> *mut T;
+  }
+  impl<T> AsMutPtr<T> for std::mem::MaybeUninit<T> {
+      fn as_mut_ptr(&self) -> *mut T {
+          std::ptr::null_mut()
+      }
+  }
+  array![0; 1];
+  ```
+
+  The flaw was corrected by explicitly referencing variables in macro body in order to avoid auto-ref.
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-83gg-pwxf-jr89
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/rustsec/advisory-db/blob/main/crates/array-macro/RUSTSEC-2020-0161.md
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/xfix/array-macro
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/xfix/array-macro/commit/01940637dd8f3bfeeee3faf9639fa9ae52f19f4d
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://gitlab.com/KonradBorowski/array-macro/-/commit/01940637dd8f3bfeeee3faf9639fa9ae52f19f4d
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://rustsec.org/advisories/RUSTSEC-2020-0161.html
+weaknesses: []
+references:
+  - url: https://github.com/rustsec/advisory-db/blob/main/crates/array-macro/RUSTSEC-2020-0161.md
+    reference_type:
+    reference_id:
+  - url: https://github.com/xfix/array-macro
+    reference_type:
+    reference_id:
+  - url: https://github.com/xfix/array-macro/commit/01940637dd8f3bfeeee3faf9639fa9ae52f19f4d
+    reference_type:
+    reference_id:
+  - url: https://gitlab.com/KonradBorowski/array-macro/-/commit/01940637dd8f3bfeeee3faf9639fa9ae52f19f4d
+    reference_type:
+    reference_id:
+  - url: https://rustsec.org/advisories/RUSTSEC-2020-0161.html
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-83gg-pwxf-jr89
+    reference_type:
+    reference_id: GHSA-83gg-pwxf-jr89

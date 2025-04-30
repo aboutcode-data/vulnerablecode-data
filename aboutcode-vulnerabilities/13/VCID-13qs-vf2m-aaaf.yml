@@ -1,0 +1,296 @@
+vulnerability_id: VCID-13qs-vf2m-aaaf
+aliases:
+  - CVE-2021-47034
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  powerpc/64s: Fix pte update for kernel memory on radix
+
+  When adding a PTE a ptesync is needed to order the update of the PTE
+  with subsequent accesses otherwise a spurious fault may be raised.
+
+  radix__set_pte_at() does not do this for performance gains. For
+  non-kernel memory this is not an issue as any faults of this kind are
+  corrected by the page fault handler. For kernel memory these faults
+  are not handled. The current solution is that there is a ptesync in
+  flush_cache_vmap() which should be called when mapping from the
+  vmalloc region.
+
+  However, map_kernel_page() does not call flush_cache_vmap(). This is
+  troublesome in particular for code patching with Strict RWX on radix.
+  In do_patch_instruction() the page frame that contains the instruction
+  to be patched is mapped and then immediately patched. With no ordering
+  or synchronization between setting up the PTE and writing to the page
+  it is possible for faults.
+
+  As the code patching is done using __put_user_asm_goto() the resulting
+  fault is obscured - but using a normal store instead it can be seen:
+
+    BUG: Unable to handle kernel data access on write at 0xc008000008f24a3c
+    Faulting instruction address: 0xc00000000008bd74
+    Oops: Kernel access of bad area, sig: 11 [#1]
+    LE PAGE_SIZE=64K MMU=Radix SMP NR_CPUS=2048 NUMA PowerNV
+    Modules linked in: nop_module(PO+) [last unloaded: nop_module]
+    CPU: 4 PID: 757 Comm: sh Tainted: P           O      5.10.0-rc5-01361-ge3c1b78c8440-dirty #43
+    NIP:  c00000000008bd74 LR: c00000000008bd50 CTR: c000000000025810
+    REGS: c000000016f634a0 TRAP: 0300   Tainted: P           O       (5.10.0-rc5-01361-ge3c1b78c8440-dirty)
+    MSR:  9000000000009033 <SF,HV,EE,ME,IR,DR,RI,LE>  CR: 44002884  XER: 00000000
+    CFAR: c00000000007c68c DAR: c008000008f24a3c DSISR: 42000000 IRQMASK: 1
+
+  This results in the kind of issue reported here:
+    https://lore.kernel.org/linuxppc-dev/15AC5B0E-A221-4B8C-9039-FA96B8EF7C88@lca.pw/
+
+  Chris Riedl suggested a reliable way to reproduce the issue:
+    $ mount -t debugfs none /sys/kernel/debug
+    $ (while true; do echo function > /sys/kernel/debug/tracing/current_tracer ; echo nop > /sys/kernel/debug/tracing/current_tracer ; done) &
+
+  Turning ftrace on and off does a large amount of code patching which
+  in usually less then 5min will crash giving a trace like:
+
+     ftrace-powerpc: (____ptrval____): replaced (4b473b11) != old (60000000)
+     ------------[ ftrace bug ]------------
+     ftrace failed to modify
+     [<c000000000bf8e5c>] napi_busy_loop+0xc/0x390
+      actual:   11:3b:47:4b
+     Setting ftrace call site to call ftrace function
+     ftrace record flags: 80000001
+      (1)
+      expected tramp: c00000000006c96c
+     ------------[ cut here ]------------
+     WARNING: CPU: 4 PID: 809 at kernel/trace/ftrace.c:2065 ftrace_bug+0x28c/0x2e8
+     Modules linked in: nop_module(PO-) [last unloaded: nop_module]
+     CPU: 4 PID: 809 Comm: sh Tainted: P           O      5.10.0-rc5-01360-gf878ccaf250a #1
+     NIP:  c00000000024f334 LR: c00000000024f330 CTR: c0000000001a5af0
+     REGS: c000000004c8b760 TRAP: 0700   Tainted: P           O       (5.10.0-rc5-01360-gf878ccaf250a)
+     MSR:  900000000282b033 <SF,HV,VEC,VSX,EE,FP,ME,IR,DR,RI,LE>  CR: 28008848  XER: 20040000
+     CFAR: c0000000001a9c98 IRQMASK: 0
+     GPR00: c00000000024f330 c000000004c8b9f0 c000000002770600 0000000000000022
+     GPR04: 00000000ffff7fff c000000004c8b6d0 0000000000000027 c0000007fe9bcdd8
+     GPR08: 0000000000000023 ffffffffffffffd8 0000000000000027 c000000002613118
+     GPR12: 0000000000008000 c0000007fffdca00 0000000000000000 0000000000000000
+     GPR16: 0000000023ec37c5 0000000000000000 0000000000000000 0000000000000008
+     GPR20: c000000004c8bc90 c0000000027a2d20 c000000004c8bcd0 c000000002612fe8
+     GPR24: 0000000000000038 0000000000000030 0000000000000028 0000000000000020
+     GPR28: c000000000ff1b68 c000000000bf8e5c c00000000312f700 c000000000fbb9b0
+     NIP ftrace_bug+0x28c/0x2e8
+     LR  ftrace_bug+0x288/0x2e8
+     Call T
+  ---truncated---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47034.json
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06967'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.06969'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11609'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11632'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11700'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11696'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11709'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11764'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11819'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12119'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12177'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12271'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11828'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11841'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11891'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.12225'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11214'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.11518'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11534'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11568'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11441'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.11398'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.1153'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '0.00199'
+    scoring_system: epss
+    scoring_elements: '0.28048'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00415'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00416'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.0041'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00409'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00314'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00316'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00309'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00412'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: 7e-05
+    scoring_system: epss
+    scoring_elements: '0.00413'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+  - score: '4.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-400
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47034.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47034
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-47034
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/01ac203e2119d8922126886ddea309fb676f955f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/73f9dccb29e4f82574bec2765c0090cdb0404301
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/84c0762633f2a7ac8399e6b97d3b9bb8e6e1d50f
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b3d5d0983388d6c4fb35f7d722556d5595f167a7
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/b8b2f37cf632434456182e9002d63cbc4cccc50c
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/e40c52ee67b155ad59f59e73ea136d02685f0e0d
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2266990
+    reference_type:
+    reference_id: 2266990
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47034
+    reference_type:
+    reference_id: CVE-2021-47034

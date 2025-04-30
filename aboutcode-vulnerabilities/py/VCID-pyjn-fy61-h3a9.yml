@@ -1,0 +1,177 @@
+vulnerability_id: VCID-pyjn-fy61-h3a9
+aliases:
+  - CVE-2025-22022
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  usb: xhci: Apply the link chain quirk on NEC isoc endpoints
+
+  Two clearly different specimens of NEC uPD720200 (one with start/stop
+  bug, one without) were seen to cause IOMMU faults after some Missed
+  Service Errors. Faulting address is immediately after a transfer ring
+  segment and patched dynamic debug messages revealed that the MSE was
+  received when waiting for a TD near the end of that segment:
+
+  [ 1.041954] xhci_hcd: Miss service interval error for slot 1 ep 2 expected TD DMA ffa08fe0
+  [ 1.042120] xhci_hcd: AMD-Vi: Event logged [IO_PAGE_FAULT domain=0x0005 address=0xffa09000 flags=0x0000]
+  [ 1.042146] xhci_hcd: AMD-Vi: Event logged [IO_PAGE_FAULT domain=0x0005 address=0xffa09040 flags=0x0000]
+
+  It gets even funnier if the next page is a ring segment accessible to
+  the HC. Below, it reports MSE in segment at ff1e8000, plows through a
+  zero-filled page at ff1e9000 and starts reporting events for TRBs in
+  page at ff1ea000 every microframe, instead of jumping to seg ff1e6000.
+
+  [ 7.041671] xhci_hcd: Miss service interval error for slot 1 ep 2 expected TD DMA ff1e8fe0
+  [ 7.041999] xhci_hcd: Miss service interval error for slot 1 ep 2 expected TD DMA ff1e8fe0
+  [ 7.042011] xhci_hcd: WARN: buffer overrun event for slot 1 ep 2 on endpoint
+  [ 7.042028] xhci_hcd: All TDs skipped for slot 1 ep 2. Clear skip flag.
+  [ 7.042134] xhci_hcd: WARN: buffer overrun event for slot 1 ep 2 on endpoint
+  [ 7.042138] xhci_hcd: ERROR Transfer event TRB DMA ptr not part of current TD ep_index 2 comp_code 31
+  [ 7.042144] xhci_hcd: Looking for event-dma 00000000ff1ea040 trb-start 00000000ff1e6820 trb-end 00000000ff1e6820
+  [ 7.042259] xhci_hcd: WARN: buffer overrun event for slot 1 ep 2 on endpoint
+  [ 7.042262] xhci_hcd: ERROR Transfer event TRB DMA ptr not part of current TD ep_index 2 comp_code 31
+  [ 7.042266] xhci_hcd: Looking for event-dma 00000000ff1ea050 trb-start 00000000ff1e6820 trb-end 00000000ff1e6820
+
+  At some point completion events change from Isoch Buffer Overrun to
+  Short Packet and the HC finally finds cycle bit mismatch in ff1ec000.
+
+  [ 7.098130] xhci_hcd: ERROR Transfer event TRB DMA ptr not part of current TD ep_index 2 comp_code 13
+  [ 7.098132] xhci_hcd: Looking for event-dma 00000000ff1ecc50 trb-start 00000000ff1e6820 trb-end 00000000ff1e6820
+  [ 7.098254] xhci_hcd: ERROR Transfer event TRB DMA ptr not part of current TD ep_index 2 comp_code 13
+  [ 7.098256] xhci_hcd: Looking for event-dma 00000000ff1ecc60 trb-start 00000000ff1e6820 trb-end 00000000ff1e6820
+  [ 7.098379] xhci_hcd: Overrun event on slot 1 ep 2
+
+  It's possible that data from the isochronous device were written to
+  random buffers of pending TDs on other endpoints (either IN or OUT),
+  other devices or even other HCs in the same IOMMU domain.
+
+  Lastly, an error from a different USB device on another HC. Was it
+  caused by the above? I don't know, but it may have been. The disk
+  was working without any other issues and generated PCIe traffic to
+  starve the NEC of upstream BW and trigger those MSEs. The two HCs
+  shared one x1 slot by means of a commercial "PCIe splitter" board.
+
+  [ 7.162604] usb 10-2: reset SuperSpeed USB device number 3 using xhci_hcd
+  [ 7.178990] sd 9:0:0:0: [sdb] tag#0 UNKNOWN(0x2003) Result: hostbyte=0x07 driverbyte=DRIVER_OK cmd_age=0s
+  [ 7.179001] sd 9:0:0:0: [sdb] tag#0 CDB: opcode=0x28 28 00 04 02 ae 00 00 02 00 00
+  [ 7.179004] I/O error, dev sdb, sector 67284480 op 0x0:(READ) flags 0x80700 phys_seg 5 prio class 0
+
+  Fortunately, it appears that this ridiculous bug is avoided by setting
+  the chain bit of Link TRBs on isochronous rings. Other ancient HCs are
+  known which also expect the bit to be set and they ignore Link TRBs if
+  it's not. Reportedly, 0.95 spec guaranteed that the bit is set.
+
+  The bandwidth-starved NEC HC running a 32KB/uframe UVC endpoint reports
+  tens of MSEs per second and runs into the bug within seconds. Chaining
+  Link TRBs allows the same workload to run for many minutes, many times.
+
+  No ne
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22022.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02937'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02911'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02921'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02932'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02912'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.02933'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04605'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04634'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04629'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04636'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04637'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.0465'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04642'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+  - score: '6.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-22022.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-22022
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-22022
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/061a1683bae6ef56ab8fa392725ba7495515cd1d
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/43a18225150ce874d23b37761c302a5dffee1595
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a4931d9fb99eb5462f3eaa231999d279c40afb21
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/bb0ba4cb1065e87f9cc75db1fa454e56d0894d01
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2360100
+    reference_type:
+    reference_id: 2360100
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-22022
+    reference_type:
+    reference_id: CVE-2025-22022

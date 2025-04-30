@@ -1,0 +1,352 @@
+vulnerability_id: VCID-he5c-e2wu-aaam
+aliases:
+  - CVE-2021-47303
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  bpf: Track subprog poke descriptors correctly and fix use-after-free
+
+  Subprograms are calling map_poke_track(), but on program release there is no
+  hook to call map_poke_untrack(). However, on program release, the aux memory
+  (and poke descriptor table) is freed even though we still have a reference to
+  it in the element list of the map aux data. When we run map_poke_run(), we then
+  end up accessing free'd memory, triggering KASAN in prog_array_map_poke_run():
+
+    [...]
+    [  402.824689] BUG: KASAN: use-after-free in prog_array_map_poke_run+0xc2/0x34e
+    [  402.824698] Read of size 4 at addr ffff8881905a7940 by task hubble-fgs/4337
+    [  402.824705] CPU: 1 PID: 4337 Comm: hubble-fgs Tainted: G          I       5.12.0+ #399
+    [  402.824715] Call Trace:
+    [  402.824719]  dump_stack+0x93/0xc2
+    [  402.824727]  print_address_description.constprop.0+0x1a/0x140
+    [  402.824736]  ? prog_array_map_poke_run+0xc2/0x34e
+    [  402.824740]  ? prog_array_map_poke_run+0xc2/0x34e
+    [  402.824744]  kasan_report.cold+0x7c/0xd8
+    [  402.824752]  ? prog_array_map_poke_run+0xc2/0x34e
+    [  402.824757]  prog_array_map_poke_run+0xc2/0x34e
+    [  402.824765]  bpf_fd_array_map_update_elem+0x124/0x1a0
+    [...]
+
+  The elements concerned are walked as follows:
+
+      for (i = 0; i < elem->aux->size_poke_tab; i++) {
+             poke = &elem->aux->poke_tab[i];
+      [...]
+
+  The access to size_poke_tab is a 4 byte read, verified by checking offsets
+  in the KASAN dump:
+
+    [  402.825004] The buggy address belongs to the object at ffff8881905a7800
+                   which belongs to the cache kmalloc-1k of size 1024
+    [  402.825008] The buggy address is located 320 bytes inside of
+                   1024-byte region [ffff8881905a7800, ffff8881905a7c00)
+
+  The pahole output of bpf_prog_aux:
+
+    struct bpf_prog_aux {
+      [...]
+      /* --- cacheline 5 boundary (320 bytes) --- */
+      u32                        size_poke_tab;        /*   320     4 */
+      [...]
+
+  In general, subprograms do not necessarily manage their own data structures.
+  For example, BTF func_info and linfo are just pointers to the main program
+  structure. This allows reference counting and cleanup to be done on the latter
+  which simplifies their management a bit. The aux->poke_tab struct, however,
+  did not follow this logic. The initial proposed fix for this use-after-free
+  bug further embedded poke data tracking into the subprogram with proper
+  reference counting. However, Daniel and Alexei questioned why we were treating
+  these objects special; I agree, its unnecessary. The fix here removes the per
+  subprogram poke table allocation and map tracking and instead simply points
+  the aux->poke_tab pointer at the main programs poke table. This way, map
+  tracking is simplified to the main program and we do not need to manage them
+  per subprogram.
+
+  This also means, bpf_prog_free_deferred(), which unwinds the program reference
+  counting and kfrees objects, needs to ensure that we don't try to double free
+  the poke_tab when free'ing the subprog structures. This is easily solved by
+  NULL'ing the poke_tab pointer. The second detail is to ensure that per
+  subprogram JIT logic only does fixups on poke_tab[] entries it owns. To do
+  this, we add a pointer in the poke structure to point at the subprogram value
+  so JITs can easily check while walking the poke_tab structure if the current
+  entry belongs to the current program. The aux pointer is stable and therefore
+  suitable for such comparison. On the jit_subprogs() error path, we omit
+  cleaning up the poke->aux field because these are only ever referenced from
+  the JIT side, but on error we will never make it to the JIT, so its fine to
+  leave them dangling. Removing these pointers would complicate the error path
+  for no reason. However, we do need to untrack all poke descriptors from the
+  main program as otherwise they could race with the freeing of JIT memory from
+  the subprograms. Lastly, a748c6975dea3 ("bpf: propagate poke des
+  ---truncated---
+severities:
+  - score: '4.4'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47303.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.05078'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.04987'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.232'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23217'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23209'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23201'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19534'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19488'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19654'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19668'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19686'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19685'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19641'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19626'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19639'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19653'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19692'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19683'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.1965'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19634'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.19598'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23063'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23122'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23175'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23223'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23193'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23184'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23177'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.2319'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '0.00313'
+    scoring_system: epss
+    scoring_elements: '0.38054'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2021-47303
+weaknesses:
+  - CWE-416
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47303.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47303
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-47303
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/599148d40366bd5d1d504a3a8fcd65e21107e500
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/a9f36bf3613c65cb587c70fac655c775d911409b
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f263a81451c12da5a342d90572e317e611846f2c
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2282480
+    reference_type:
+    reference_id: 2282480
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.14:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.14:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47303
+    reference_type:
+    reference_id: CVE-2021-47303

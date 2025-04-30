@@ -1,0 +1,326 @@
+vulnerability_id: VCID-6q65-bens-aaaq
+aliases:
+  - CVE-2021-47099
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  veth: ensure skb entering GRO are not cloned.
+
+  After commit d3256efd8e8b ("veth: allow enabling NAPI even without XDP"),
+  if GRO is enabled on a veth device and TSO is disabled on the peer
+  device, TCP skbs will go through the NAPI callback. If there is no XDP
+  program attached, the veth code does not perform any share check, and
+  shared/cloned skbs could enter the GRO engine.
+
+  Ignat reported a BUG triggered later-on due to the above condition:
+
+  [   53.970529][    C1] kernel BUG at net/core/skbuff.c:3574!
+  [   53.981755][    C1] invalid opcode: 0000 [#1] PREEMPT SMP KASAN PTI
+  [   53.982634][    C1] CPU: 1 PID: 19 Comm: ksoftirqd/1 Not tainted 5.16.0-rc5+ #25
+  [   53.982634][    C1] Hardware name: QEMU Standard PC (Q35 + ICH9, 2009), BIOS 0.0.0 02/06/2015
+  [   53.982634][    C1] RIP: 0010:skb_shift+0x13ef/0x23b0
+  [   53.982634][    C1] Code: ea 03 0f b6 04 02 48 89 fa 83 e2 07 38 d0
+  7f 08 84 c0 0f 85 41 0c 00 00 41 80 7f 02 00 4d 8d b5 d0 00 00 00 0f
+  85 74 f5 ff ff <0f> 0b 4d 8d 77 20 be 04 00 00 00 4c 89 44 24 78 4c 89
+  f7 4c 89 8c
+  [   53.982634][    C1] RSP: 0018:ffff8881008f7008 EFLAGS: 00010246
+  [   53.982634][    C1] RAX: 0000000000000000 RBX: ffff8881180b4c80 RCX: 0000000000000000
+  [   53.982634][    C1] RDX: 0000000000000002 RSI: ffff8881180b4d3c RDI: ffff88810bc9cac2
+  [   53.982634][    C1] RBP: ffff8881008f70b8 R08: ffff8881180b4cf4 R09: ffff8881180b4cf0
+  [   53.982634][    C1] R10: ffffed1022999e5c R11: 0000000000000002 R12: 0000000000000590
+  [   53.982634][    C1] R13: ffff88810f940c80 R14: ffff88810f940d50 R15: ffff88810bc9cac0
+  [   53.982634][    C1] FS:  0000000000000000(0000) GS:ffff888235880000(0000) knlGS:0000000000000000
+  [   53.982634][    C1] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+  [   53.982634][    C1] CR2: 00007ff5f9b86680 CR3: 0000000108ce8004 CR4: 0000000000170ee0
+  [   53.982634][    C1] Call Trace:
+  [   53.982634][    C1]  <TASK>
+  [   53.982634][    C1]  tcp_sacktag_walk+0xaba/0x18e0
+  [   53.982634][    C1]  tcp_sacktag_write_queue+0xe7b/0x3460
+  [   53.982634][    C1]  tcp_ack+0x2666/0x54b0
+  [   53.982634][    C1]  tcp_rcv_established+0x4d9/0x20f0
+  [   53.982634][    C1]  tcp_v4_do_rcv+0x551/0x810
+  [   53.982634][    C1]  tcp_v4_rcv+0x22ed/0x2ed0
+  [   53.982634][    C1]  ip_protocol_deliver_rcu+0x96/0xaf0
+  [   53.982634][    C1]  ip_local_deliver_finish+0x1e0/0x2f0
+  [   53.982634][    C1]  ip_sublist_rcv_finish+0x211/0x440
+  [   53.982634][    C1]  ip_list_rcv_finish.constprop.0+0x424/0x660
+  [   53.982634][    C1]  ip_list_rcv+0x2c8/0x410
+  [   53.982634][    C1]  __netif_receive_skb_list_core+0x65c/0x910
+  [   53.982634][    C1]  netif_receive_skb_list_internal+0x5f9/0xcb0
+  [   53.982634][    C1]  napi_complete_done+0x188/0x6e0
+  [   53.982634][    C1]  gro_cell_poll+0x10c/0x1d0
+  [   53.982634][    C1]  __napi_poll+0xa1/0x530
+  [   53.982634][    C1]  net_rx_action+0x567/0x1270
+  [   53.982634][    C1]  __do_softirq+0x28a/0x9ba
+  [   53.982634][    C1]  run_ksoftirqd+0x32/0x60
+  [   53.982634][    C1]  smpboot_thread_fn+0x559/0x8c0
+  [   53.982634][    C1]  kthread+0x3b9/0x490
+  [   53.982634][    C1]  ret_from_fork+0x22/0x30
+  [   53.982634][    C1]  </TASK>
+
+  Address the issue by skipping the GRO stage for shared or cloned skbs.
+  To reduce the chance of OoO, try to unclone the skbs before giving up.
+
+  v1 -> v2:
+   - use avoid skb_copy and fallback to netif_receive_skb  - Eric
+severities:
+  - score: '6.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:H/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47099.json
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11784'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11821'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11941'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11946'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.11983'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.1202'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12008'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12017'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12028'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12059'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.12048'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '0.0021'
+    scoring_system: epss
+    scoring_elements: '0.29144'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.0044'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00442'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00439'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00335'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00331'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00443'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00444'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00445'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: 8e-05
+    scoring_system: epss
+    scoring_elements: '0.00441'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-20
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2021-47099.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2021-47099
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9695b7de5b4760ed22132aca919570c0190cb0ce
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d2269ae48598e05b59ec9ea9e6e44fd33941130d
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2267919
+    reference_type:
+    reference_id: 2267919
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:5.16:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:5.16:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2021-47099
+    reference_type:
+    reference_id: CVE-2021-47099
+  - url: https://access.redhat.com/errata/RHSA-2022:7444
+    reference_type:
+    reference_id: RHSA-2022:7444
+  - url: https://access.redhat.com/errata/RHSA-2022:7683
+    reference_type:
+    reference_id: RHSA-2022:7683
+  - url: https://access.redhat.com/errata/RHSA-2022:7933
+    reference_type:
+    reference_id: RHSA-2022:7933
+  - url: https://access.redhat.com/errata/RHSA-2022:8267
+    reference_type:
+    reference_id: RHSA-2022:8267
+  - url: https://access.redhat.com/errata/RHSA-2024:1877
+    reference_type:
+    reference_id: RHSA-2024:1877

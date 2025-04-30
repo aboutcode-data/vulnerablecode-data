@@ -1,0 +1,377 @@
+vulnerability_id: VCID-6z4g-6vkh-aaah
+aliases:
+  - CVE-2024-37904
+  - GHSA-hpcg-xjq5-g666
+summary: "Minder affected by denial of service from maliciously configured Git repository\n\
+  Minder's Git provider is vulnerable to a denial of service from a maliciously configured GitHub\
+  \ repository. The Git provider clones users repositories using the `github.com/go-git/go-git/v5`\
+  \ library on these lines:\n\nhttps://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L55-L89\n\
+  \nThe Git provider does the following on these lines:\n\nFirst, it sets the `CloneOptions`,\
+  \ specifying the url, the depth etc:\n\nhttps://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L56-L62\n\
+  \nIt then validates the options: \n\nhttps://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L66-L68\n\
+  \nIt then sets up an in-memory filesystem, to which it clones:\n\nhttps://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L70-L71\n\
+  \nFinally, it clones the repository:\n\nhttps://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L77\n\
+  \nThis `(g *Git) Clone()` method is vulnerable to a DoS attack: A Minder user can instruct\
+  \ Minder to clone a large repository which will exhaust memory and crash the Minder server.\
+  \ The root cause of this vulnerability is a combination of the following conditions:\n\n1.\
+  \ Users can control the Git URL which Minder clones.\n2. Minder does not enforce a size limit\
+  \ to the repository.\n3. Minder clones the entire repository into memory.\n\n## PoC\nHere,\
+  \ we share a PoC of how the logic of `(g *Git) Clone()` behaves isolated from Minder. To get\
+  \ a true assessment of whether this is 100% identical to its behavior in the context of Minder\
+  \ instead of an isolated PoC, this should be tested out by creating a large repository and\
+  \ instructing Minder to clone it. However, even in that case, it might not be possible to\
+  \ deterministically trigger a DoS because of noise from network calls.\n\nWe believe the below\
+  \ PoC is a correct representation because:\n\n1. We have replicated the important and impactful\
+  \ parts of `(g *Git) Clone()`\n2. We run this in multiple goroutines which Minder does here:\
+  \ https://github.com/stacklok/minder/blob/3afa50ef2e06269ed619d390d266cf1988c2068b/internal/engine/executor.go#L128\n\
+  3. Minders timeout is set to 5 minutes: https://github.com/stacklok/minder/blob/3afa50ef2e06269ed619d390d266cf1988c2068b/internal/engine/executor.go#L114.\
+  \ With a reasonable connection, Minder can download many GBs in that period.\n\nIn our PoC,\
+  \ we demonstrate that under these two conditions, a large repository can perform a SigKill\
+  \ of the Go process which in Minders case is the Minder server.\n\nFirst, create a local Git\
+  \ repository:\n```\ncd /tmp\nmkdir upstream-repo\ncd upstream-repo\ngit init --bare\ncd /tmp\n\
+  git clone /tmp/upstream-repo ./upstream-repo-clone\ncd ./upstream-repo-clone\n# Add large\
+  \ file:\nfallocate -l 8G large-file\ngit add .\ngit commit -m \"add large file\"\ngit push\n\
+  cd /tmp\n```\n\nCreate and run the following script in `/tmp/dos-poc/main.go`:\n\n```go\n\
+  package main\n\nimport (\n        \"context\"\n        \"fmt\"\n        \"github.com/go-git/go-billy/v5/memfs\"\
+  \n        \"github.com/go-git/go-git/v5\"\n        \"github.com/go-git/go-git/v5/storage/memory\"\
+  \n        \"runtime\"\n        \"sync\"\n)\n\nfunc main() {\n        var (\n             \
+  \   wg  sync.WaitGroup\n        )\n\n        for i := 0; i < 2; i++ {\n                fmt.Println(\"\
+  Starting one...\")\n                wg.Add(1)\n                go func() {\n             \
+  \           defer wg.Done()\n                        opts := &git.CloneOptions{\n        \
+  \                        URL:          \"/tmp/upstream-repo\",\n                         \
+  \       SingleBranch: true,\n                                Depth:        1,\n          \
+  \                      Tags:         git.NoTags,\n                        }\n\n          \
+  \              storer := memory.NewStorage()\n                        fs := memfs.New()\n\
+  \                        git.CloneContext(context.Background(), storer, fs, opts)\n      \
+  \          }()\n        }\n        fmt.Println(\"Finished\")\n        PrintMemUsage()\n  \
+  \      wg.Wait()\n\n}\n\nfunc PrintMemUsage() {\n        var m runtime.MemStats\n        runtime.ReadMemStats(&m)\n\
+  \        // For info on each, see: https://golang.org/pkg/runtime/#MemStats\n        fmt.Printf(\"\
+  Alloc = %v MiB\", bToMb(m.Alloc))\n        fmt.Printf(\"\\tTotalAlloc = %v MiB\", bToMb(m.TotalAlloc))\n\
+  \        fmt.Printf(\"\\tSys = %v MiB\", bToMb(m.Sys))\n        fmt.Printf(\"\\tNumGC = %v\\\
+  n\", m.NumGC)\n}\n\nfunc bToMb(b uint64) uint64 {\n        return b / 1024 / 1024\n}\n```\n\
+  \nOn my local machine, this Go program is killed before it prints \"Finished\" in the terminal.\
+  \ Observing the memory by way of `top`, we can see that the memory climbs steadily until the\
+  \ program crashes around 93% memory consumption."
+severities:
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17041'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17624'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17315'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17350'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17830'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17732'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17645'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17329'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17164'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17142'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17147'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.17069'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16666'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.16947'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42851'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42847'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42908'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42967'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42998'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42995'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.429'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42897'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42904'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42907'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42911'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42919'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00203'
+    scoring_system: epss
+    scoring_elements: '0.42883'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49824'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49847'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49868'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49873'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49863'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49843'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49848'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49857'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49827'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00293'
+    scoring_system: epss
+    scoring_elements: '0.49806'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00345'
+    scoring_system: epss
+    scoring_elements: '0.54205'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00349'
+    scoring_system: epss
+    scoring_elements: '0.54467'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00349'
+    scoring_system: epss
+    scoring_elements: '0.5446'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00349'
+    scoring_system: epss
+    scoring_elements: '0.54361'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00349'
+    scoring_system: epss
+    scoring_elements: '0.54377'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '0.00412'
+    scoring_system: epss
+    scoring_elements: '0.44524'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L55-L89
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L55-L89
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L56-L62
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L56-L62
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/35bab8f9a6025eea9e6e3cef6bd80707ac03d2a9
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/35bab8f9a6025eea9e6e3cef6bd80707ac03d2a9
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/7979b43
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/7979b43
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/security/advisories/GHSA-hpcg-xjq5-g666
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/security/advisories/GHSA-hpcg-xjq5-g666
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-37904
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-37904
+weaknesses:
+  - CWE-400
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-37904
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L55-L89
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/85985445c8ac3e51f03372e99c7b2f08a6d274aa/internal/providers/git/git.go#L56-L62
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/commit/35bab8f9a6025eea9e6e3cef6bd80707ac03d2a9
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/commit/7979b43
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/security/advisories/GHSA-hpcg-xjq5-g666
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-37904
+    reference_type:
+    reference_id:

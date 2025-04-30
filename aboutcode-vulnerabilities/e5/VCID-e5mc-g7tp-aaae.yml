@@ -1,0 +1,361 @@
+vulnerability_id: VCID-e5mc-g7tp-aaae
+aliases:
+  - CVE-2024-34084
+  - GHSA-9c5w-9q3f-3hv7
+summary: "Minder's GitHub Webhook Handler vulnerable to DoS from un-validated requests\nMinder's\
+  \ `HandleGithubWebhook` is susceptible to a denial of service attack from an untrusted HTTP\
+  \ request. The vulnerability exists before the request has been validated, and as such the\
+  \ request is still untrusted at the point of failure. This allows an attacker with the ability\
+  \ to send requests to `HandleGithubWebhook` to crash the Minder controlplane and deny other\
+  \ users from using it.\n\nOne of the first things that `HandleGithubWebhook` does is to validate\
+  \ the payload signature. This is done by way of the internal helper `validatePayloadSignature`:\n\
+  \nhttps://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L213-L218\n\
+  \n`validatePayloadSignature` generates a reader from the incoming request by way of the internal\
+  \ helper `readerFromRequest`:\n\nhttps://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L337-L342\n\
+  \nTo create a reader from the incoming request, `readerFromRequest` first reads the request\
+  \ body entirely into memory on line 368:\n\nhttps://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L367-L377\n\
+  \nThis is a vulnerability, since an HTTP request with a large body can exhaust the memory\
+  \ of the machine running Minder and cause the Go runtime to crash Minder.\n\nNote that this\
+  \ occurs before Minder has validated the request, and as such, the request is still untrusted.\n\
+  \nTo test this out, we can use the existing `TestHandleWebHookRepository` unit test and modify\
+  \ the HTTP request body to be large. \n\nTo do that, change these lines:\n\nhttps://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks_test.go#L278-L283\n\
+  \n... to these lines:\n```go\n\tpackageJson, err := json.Marshal(event)\n\trequire.NoError(t,\
+  \ err, \"failed to marshal package event\")\n\n        maliciousBody := strings.NewReader(strings.Repeat(\"\
+  1337\", 1000000000))\n        maliciousBodyReader := io.MultiReader(maliciousBody, maliciousBody,\
+  \ maliciousBody, maliciousBody, maliciousBody)\n        _ = packageJson\n\n\tclient := &http.Client{}\n\
+  \treq, err := http.NewRequest(\"POST\", fmt.Sprintf(\"http://%s\", addr), maliciousBodyReader)\n\
+  \trequire.NoError(t, err, \"failed to create request\")\n```\n\nThen run the unit test again.\
+  \ WARNING, SAVE ALL WORK BEFORE DOING THIS.\n\nOn my local machine, this causes the machine\
+  \ to freeze, and Go finally performs a sigkill: \n\n```\nsignal: killed\nFAIL      github.com/stacklok/minder/internal/controlplane\
+  \          30.759s\nFAIL\n```"
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.09902'
+    published_at: '2024-11-01 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10184'
+    published_at: '2024-11-18 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49967'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49934'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49983'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50041'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50067'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50066'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49976'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49986'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50002'
+    published_at: '2025-04-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50023'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.5002'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50039'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.50019'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00268'
+    scoring_system: epss
+    scoring_elements: '0.49994'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53934'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.5396'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.5397'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53948'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53808'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53791'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53888'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53893'
+    published_at: '2025-04-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53915'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53935'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53913'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53897'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00341'
+    scoring_system: epss
+    scoring_elements: '0.53939'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '0.00661'
+    scoring_system: epss
+    scoring_elements: '0.55041'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+  - score: '5.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L213-L218
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L213-L218
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L337-L342
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L337-L342
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L367-L377
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L367-L377
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks_test.go#L278-L283
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks_test.go#L278-L283
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/3e5a527d2f1b535159206161d1d519602c75bd0d
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/commit/3e5a527d2f1b535159206161d1d519602c75bd0d
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/stacklok/minder/security/advisories/GHSA-9c5w-9q3f-3hv7
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/stacklok/minder/security/advisories/GHSA-9c5w-9q3f-3hv7
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-34084
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-34084
+weaknesses:
+  - CWE-400
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-34084
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L213-L218
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L337-L342
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks.go#L367-L377
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/blob/ee66f6c0763212503c898cfefb65ce1450c7f5ac/internal/controlplane/handlers_githubwebhooks_test.go#L278-L283
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/commit/3e5a527d2f1b535159206161d1d519602c75bd0d
+    reference_type:
+    reference_id:
+  - url: https://github.com/stacklok/minder/security/advisories/GHSA-9c5w-9q3f-3hv7
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-34084
+    reference_type:
+    reference_id:

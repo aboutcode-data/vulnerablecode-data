@@ -1,0 +1,354 @@
+vulnerability_id: VCID-sc18-veg7-kyab
+aliases:
+  - CVE-2024-53065
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  mm/slab: fix warning caused by duplicate kmem_cache creation in kmem_buckets_create
+
+  Commit b035f5a6d852 ("mm: slab: reduce the kmalloc() minimum alignment
+  if DMA bouncing possible") reduced ARCH_KMALLOC_MINALIGN to 8 on arm64.
+  However, with KASAN_HW_TAGS enabled, arch_slab_minalign() becomes 16.
+  This causes kmalloc_caches[*][8] to be aliased to kmalloc_caches[*][16],
+  resulting in kmem_buckets_create() attempting to create a kmem_cache for
+  size 16 twice. This duplication triggers warnings on boot:
+
+  [    2.325108] ------------[ cut here ]------------
+  [    2.325135] kmem_cache of name 'memdup_user-16' already exists
+  [    2.325783] WARNING: CPU: 0 PID: 1 at mm/slab_common.c:107 __kmem_cache_create_args+0xb8/0x3b0
+  [    2.327957] Modules linked in:
+  [    2.328550] CPU: 0 UID: 0 PID: 1 Comm: swapper/0 Not tainted 6.12.0-rc5mm-unstable-arm64+ #12
+  [    2.328683] Hardware name: QEMU QEMU Virtual Machine, BIOS 2024.02-2 03/11/2024
+  [    2.328790] pstate: 61000009 (nZCv daif -PAN -UAO -TCO +DIT -SSBS BTYPE=--)
+  [    2.328911] pc : __kmem_cache_create_args+0xb8/0x3b0
+  [    2.328930] lr : __kmem_cache_create_args+0xb8/0x3b0
+  [    2.328942] sp : ffff800083d6fc50
+  [    2.328961] x29: ffff800083d6fc50 x28: f2ff0000c1674410 x27: ffff8000820b0598
+  [    2.329061] x26: 000000007fffffff x25: 0000000000000010 x24: 0000000000002000
+  [    2.329101] x23: ffff800083d6fce8 x22: ffff8000832222e8 x21: ffff800083222388
+  [    2.329118] x20: f2ff0000c1674410 x19: f5ff0000c16364c0 x18: ffff800083d80030
+  [    2.329135] x17: 0000000000000000 x16: 0000000000000000 x15: 0000000000000000
+  [    2.329152] x14: 0000000000000000 x13: 0a73747369786520 x12: 79646165726c6120
+  [    2.329169] x11: 656820747563205b x10: 2d2d2d2d2d2d2d2d x9 : 0000000000000000
+  [    2.329194] x8 : 0000000000000000 x7 : 0000000000000000 x6 : 0000000000000000
+  [    2.329210] x5 : 0000000000000000 x4 : 0000000000000000 x3 : 0000000000000000
+  [    2.329226] x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+  [    2.329291] Call trace:
+  [    2.329407]  __kmem_cache_create_args+0xb8/0x3b0
+  [    2.329499]  kmem_buckets_create+0xfc/0x320
+  [    2.329526]  init_user_buckets+0x34/0x78
+  [    2.329540]  do_one_initcall+0x64/0x3c8
+  [    2.329550]  kernel_init_freeable+0x26c/0x578
+  [    2.329562]  kernel_init+0x3c/0x258
+  [    2.329574]  ret_from_fork+0x10/0x20
+  [    2.329698] ---[ end trace 0000000000000000 ]---
+
+  [    2.403704] ------------[ cut here ]------------
+  [    2.404716] kmem_cache of name 'msg_msg-16' already exists
+  [    2.404801] WARNING: CPU: 2 PID: 1 at mm/slab_common.c:107 __kmem_cache_create_args+0xb8/0x3b0
+  [    2.404842] Modules linked in:
+  [    2.404971] CPU: 2 UID: 0 PID: 1 Comm: swapper/0 Tainted: G        W          6.12.0-rc5mm-unstable-arm64+ #12
+  [    2.405026] Tainted: [W]=WARN
+  [    2.405043] Hardware name: QEMU QEMU Virtual Machine, BIOS 2024.02-2 03/11/2024
+  [    2.405057] pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+  [    2.405079] pc : __kmem_cache_create_args+0xb8/0x3b0
+  [    2.405100] lr : __kmem_cache_create_args+0xb8/0x3b0
+  [    2.405111] sp : ffff800083d6fc50
+  [    2.405115] x29: ffff800083d6fc50 x28: fbff0000c1674410 x27: ffff8000820b0598
+  [    2.405135] x26: 000000000000ffd0 x25: 0000000000000010 x24: 0000000000006000
+  [    2.405153] x23: ffff800083d6fce8 x22: ffff8000832222e8 x21: ffff800083222388
+  [    2.405169] x20: fbff0000c1674410 x19: fdff0000c163d6c0 x18: ffff800083d80030
+  [    2.405185] x17: 0000000000000000 x16: 0000000000000000 x15: 0000000000000000
+  [    2.405201] x14: 0000000000000000 x13: 0a73747369786520 x12: 79646165726c6120
+  [    2.405217] x11: 656820747563205b x10: 2d2d2d2d2d2d2d2d x9 : 0000000000000000
+  [    2.405233] x8 : 0000000000000000 x7 : 0000000000000000 x6 : 0000000000000000
+  [    2.405248] x5 : 0000000000000000 x4 : 0000000000000000 x3 : 0000000000000000
+  [    2.405271] x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+  [    2.405287] Call trace:
+  [    2
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-53065.json
+  - score: '0.00019'
+    scoring_system: epss
+    scoring_elements: '0.03329'
+    published_at: '2025-04-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03893'
+    published_at: '2025-04-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03904'
+    published_at: '2025-04-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03891'
+    published_at: '2025-04-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03889'
+    published_at: '2025-04-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03877'
+    published_at: '2025-04-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03926'
+    published_at: '2025-04-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03932'
+    published_at: '2025-04-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03947'
+    published_at: '2025-04-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.03937'
+    published_at: '2025-04-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00021'
+    scoring_system: epss
+    scoring_elements: '0.0388'
+    published_at: '2025-04-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04243'
+    published_at: '2025-04-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04226'
+    published_at: '2025-03-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.03229'
+    published_at: '2025-03-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.042'
+    published_at: '2025-03-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04166'
+    published_at: '2025-04-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04164'
+    published_at: '2025-04-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04156'
+    published_at: '2025-04-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0417'
+    published_at: '2025-04-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04186'
+    published_at: '2025-04-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04184'
+    published_at: '2025-04-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04213'
+    published_at: '2025-04-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04235'
+    published_at: '2025-04-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0423'
+    published_at: '2025-04-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0422'
+    published_at: '2025-04-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.04202'
+    published_at: '2025-04-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05407'
+    published_at: '2025-04-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05426'
+    published_at: '2025-04-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10429'
+    published_at: '2024-11-28 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10859'
+    published_at: '2024-12-17 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10875'
+    published_at: '2024-12-19 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10932'
+    published_at: '2024-12-27 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10843'
+    published_at: '2024-12-13 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10788'
+    published_at: '2024-12-11 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10484'
+    published_at: '2024-12-03 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11287'
+    published_at: '2025-01-16 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10377'
+    published_at: '2024-11-26 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10366'
+    published_at: '2024-11-24 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10364'
+    published_at: '2024-11-23 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10302'
+    published_at: '2024-11-21 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10278'
+    published_at: '2024-11-20 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.10939'
+    published_at: '2024-12-15 00:00:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53065
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2024-53065
+weaknesses:
+  - CWE-125
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2024-53065.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2024-53065
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/1b47f9febf48641d3530ec877f4d0995c58e6b73
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/9c9201afebea1efc7ea4b8f721ee18a05bb8aca1
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2327336
+    reference_type:
+    reference_id: 2327336
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc5:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc5:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.12:rc6:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.12:rc6:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2024-53065
+    reference_type:
+    reference_id: CVE-2024-53065
+  - url: https://usn.ubuntu.com/7276-1/
+    reference_type:
+    reference_id: USN-7276-1
+  - url: https://usn.ubuntu.com/7277-1/
+    reference_type:
+    reference_id: USN-7277-1
+  - url: https://usn.ubuntu.com/7310-1/
+    reference_type:
+    reference_id: USN-7310-1
