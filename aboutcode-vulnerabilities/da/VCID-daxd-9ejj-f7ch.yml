@@ -1,0 +1,57 @@
+vulnerability_id: VCID-daxd-9ejj-f7ch
+aliases:
+  - CVE-2022-50778
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  fortify: Fix
+  __compiletime_strlen() under UBSAN_BOUNDS_LOCAL  With CONFIG_FORTIFY=y and CONFIG_UBSAN_LOCAL_BOUNDS=y
+  enabled, we observe a runtime panic while running Android''s Compatibility Test Suite''s (CTS)
+  android.hardware.input.cts.tests. This is stemming from a strlen() call in hidinput_allocate().  __compiletime_strlen()
+  is implemented in terms of __builtin_object_size(), then does an array access to check for
+  NUL-termination. A quirk of __builtin_object_size() is that for strings whose values are runtime
+  dependent, __builtin_object_size(str, 1 or 0) returns the maximum size of possible values
+  when those sizes are determinable at compile time. Example:    static const char *v = "FOO
+  BAR";   static const char *y = "FOO BA";   unsigned long x (int z) {       // Returns 8, which
+  is:       // max(__builtin_object_size(v, 1), __builtin_object_size(y, 1))       return __builtin_object_size(z
+  ? v : y, 1);   }  So when FORTIFY_SOURCE is enabled, the current implementation of __compiletime_strlen()
+  will try to access beyond the end of y at runtime using the size of v. Mixed with UBSAN_LOCAL_BOUNDS
+  we get a fault.  hidinput_allocate() has a local C string whose value is control flow dependent
+  on a switch statement, so __builtin_object_size(str, 1) evaluates to the maximum string length,
+  making all other cases fault on the last character check. hidinput_allocate() could be cleaned
+  up to avoid runtime calls to strlen() since the local variable can only have literal values,
+  so there''s no benefit to trying to fortify the strlen call site there.  Perform a __builtin_constant_p()
+  check against index 0 earlier in the macro to filter out the control-flow-dependant case.
+  Add a KUnit test for checking the expected behavioral characteristics of FORTIFY_SOURCE internals.'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50778.json
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0513'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50778
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.05111'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50778
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50778.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-50778
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2425136
+    reference_type:
+    reference_id: 2425136

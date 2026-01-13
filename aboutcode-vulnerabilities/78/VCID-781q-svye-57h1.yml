@@ -1,0 +1,228 @@
+vulnerability_id: VCID-781q-svye-57h1
+aliases:
+  - CVE-2023-53187
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  btrfs: fix use-after-free
+  of new block group that became unused  If a task creates a new block group and that block
+  group becomes unused before we finish its creation, at btrfs_create_pending_block_groups(),
+  then when btrfs_mark_bg_unused() is called against the block group, we assume that the block
+  group is currently in the list of block groups to reclaim, and we move it out of the list
+  of new block groups and into the list of unused block groups. This has two consequences:  1)
+  We move it out of the list of new block groups associated to the    current transaction. So
+  the block group creation is not finished and    if we attempt to delete the bg because it''s
+  unused, we will not find    the block group item in the extent tree (or the new block group
+  tree),    its device extent items in the device tree etc, resulting in the    deletion to
+  fail due to the missing items;  2) We don''t increment the reference count on the block group
+  when we    move it to the list of unused block groups, because we assumed the    block group
+  was on the list of block groups to reclaim, and in that    case it already has the correct
+  reference count. However the block    group was on the list of new block groups, in which
+  case no extra    reference was taken because it''s local to the current task. This    later
+  results in doing an extra reference count decrement when    removing the block group from
+  the unused list, eventually leading the    reference count to 0.  This second case was caught
+  when running generic/297 from fstests, which produced the following assertion failure and
+  stack trace:    [589.559] assertion failed: refcount_read(&block_group->refs) == 1, in fs/btrfs/block-group.c:4299   [589.559]
+  ------------[ cut here ]------------   [589.559] kernel BUG at fs/btrfs/block-group.c:4299!   [589.560]
+  invalid opcode: 0000 [#1] PREEMPT SMP PTI   [589.560] CPU: 8 PID: 2819134 Comm: umount Tainted:
+  G        W          6.4.0-rc6-btrfs-next-134+ #1   [589.560] Hardware name: QEMU Standard
+  PC (i440FX + PIIX, 1996), BIOS rel-1.16.2-0-gea1b7a073390-prebuilt.qemu.org 04/01/2014   [589.560]
+  RIP: 0010:btrfs_free_block_groups+0x449/0x4a0 [btrfs]   [589.561] Code: 68 62 da c0 (...)   [589.561]
+  RSP: 0018:ffffa55a8c3b3d98 EFLAGS: 00010246   [589.561] RAX: 0000000000000058 RBX: ffff8f030d7f2000
+  RCX: 0000000000000000   [589.562] RDX: 0000000000000000 RSI: ffffffff953f0878 RDI: 00000000ffffffff   [589.562]
+  RBP: ffff8f030d7f2088 R08: 0000000000000000 R09: ffffa55a8c3b3c50   [589.562] R10: 0000000000000001
+  R11: 0000000000000001 R12: ffff8f05850b4c00   [589.562] R13: ffff8f030d7f2090 R14: ffff8f05850b4cd8
+  R15: dead000000000100   [589.563] FS:  00007f497fd2e840(0000) GS:ffff8f09dfc00000(0000) knlGS:0000000000000000   [589.563]
+  CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033   [589.563] CR2: 00007f497ff8ec10 CR3: 0000000271472006
+  CR4: 0000000000370ee0   [589.563] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000   [589.564]
+  DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400   [589.564] Call Trace:   [589.564]  <TASK>   [589.565]  ?
+  __die_body+0x1b/0x60   [589.565]  ? die+0x39/0x60   [589.565]  ? do_trap+0xeb/0x110   [589.565]  ?
+  btrfs_free_block_groups+0x449/0x4a0 [btrfs]   [589.566]  ? do_error_trap+0x6a/0x90   [589.566]  ?
+  btrfs_free_block_groups+0x449/0x4a0 [btrfs]   [589.566]  ? exc_invalid_op+0x4e/0x70   [589.566]  ?
+  btrfs_free_block_groups+0x449/0x4a0 [btrfs]   [589.567]  ? asm_exc_invalid_op+0x16/0x20   [589.567]  ?
+  btrfs_free_block_groups+0x449/0x4a0 [btrfs]   [589.567]  ? btrfs_free_block_groups+0x449/0x4a0
+  [btrfs]   [589.567]  close_ctree+0x35d/0x560 [btrfs]   [589.568]  ? fsnotify_sb_delete+0x13e/0x1d0   [589.568]  ?
+  dispose_list+0x3a/0x50   [589.568]  ? evict_inodes+0x151/0x1a0   [589.568]  generic_shutdown_super+0x73/0x1a0   [589.569]  kill_anon_super+0x14/0x30   [589.569]  btrfs_kill_super+0x12/0x20
+  [btrfs]   [589.569]  deactivate_locked ---truncated---'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53187.json
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02681'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02701'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.0351'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02654'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.03511'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04362'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04532'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04535'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04569'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0446'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04432'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04465'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04496'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04499'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04482'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04264'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04262'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04236'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04344'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04354'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05118'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05104'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05077'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05087'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05068'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05056'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05042'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05052'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05067'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05187'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05163'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0512'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53187.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-53187
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2395421
+    reference_type:
+    reference_id: 2395421

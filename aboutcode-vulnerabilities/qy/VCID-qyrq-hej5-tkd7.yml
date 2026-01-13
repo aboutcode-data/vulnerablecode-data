@@ -1,0 +1,217 @@
+vulnerability_id: VCID-qyrq-hej5-tkd7
+aliases:
+  - CVE-2025-68131
+  - GHSA-wcj4-jw5j-44wh
+summary: |
+  CBORDecoder reuse can leak shareable values across decode calls
+  ### Summary
+  When a CBORDecoder instance is reused across multiple decode operations, values marked with the shareable tag (28) persist in memory and can be accessed by subsequent CBOR messages using the sharedref tag (29). This allows an attacker-controlled message to read data from previously decoded messages if the decoder is reused across trust boundaries.
+
+  ### Details
+  The issue is in the decoder's handling of the shareables list, which stores values tagged with CBOR tag 28 (shareable) for later reference by tag 29 (sharedref).
+
+  When decode_from_bytes() is called or when .fp is set to a new stream, the shareables list is not cleared. This allows references to persist across separate decode operations.
+
+  The issue exists in both the C extension and the pure Python decoder.
+
+  In the C extension (source/decoder.c), the _CBORDecoder_set_fp function (line ~202) updates the file pointer but does not reset the shareables state:
+
+  ```
+    static int
+    _CBORDecoder_set_fp(CBORDecoderObject *self, PyObject *value, void *closure)
+    {
+        // ... validation ...
+        tmp = self->read;
+        self->read = read;
+        Py_DECREF(tmp);
+        return 0;
+        // Missing: PyList_Clear(self->shareables) or equivalent
+    }
+  ```
+
+  In the pure Python decoder (cbor2/_decoder.py), the fp setter similarly fails to clear self._shareables.
+
+  Similarly, decode_from_bytes() in both implementations saves and restores the read pointer but does not clear the shareables list between decodes.
+
+  The shareable/sharedref tags are defined in the CBOR value sharing extension (http://cbor.schmorp.de/value-sharing) with scope limited to a single CBOR data item, not across separate messages.
+
+  ### PoC
+
+  ```
+  import cbor2
+  from io import BytesIO
+
+  # Message from trusted source containing a shareable value
+  msg1 = cbor2.dumps(cbor2.CBORTag(28, "secret"))
+
+  # Attacker-controlled message referencing index 0
+  msg2 = cbor2.dumps(cbor2.CBORTag(29, 0))
+
+  # Decoder reused across trust boundaries
+  decoder = cbor2.CBORDecoder(BytesIO(b''))
+  decoder.decode_from_bytes(msg1)
+  print(decoder.decode_from_bytes(msg2))  # prints "secret"
+  ```
+  No special configuration required. Affects any application that reuses a CBORDecoder instance to decode messages from different sources.
+
+  ### Impact
+  Information disclosure. Applications that reuse a CBORDecoder across trust boundaries are vulnerable if the trusted messages use value sharing (tag 28) and an attacker can send messages containing shared references (tag 29). An attacker who can send a crafted CBOR message containing a sharedref tag can read values from previously decoded messages, potentially exposing sensitive data such as credentials, tokens, or private user data.
+
+  ### Related
+  A similar issue in the encoder could produce invalid CBOR with dangling shared references:
+
+  ```
+  import cbor2
+  from io import BytesIO
+
+  # Create encoder with value sharing enabled
+  encoder = cbor2.CBOREncoder(BytesIO(), value_sharing=True)
+
+  # Persistent object that will be encoded multiple times
+  shared_obj = ['hello']
+
+  # First encode: array containing shared_obj twice
+  encoder.encode([shared_obj, shared_obj])
+  print(f'First encode: {encoder.fp.getvalue().hex()}')
+  # Output: d81c82d81c816568656c6c6fd81d01
+
+  # Second encode: just shared_obj
+  encoder.fp = BytesIO()
+  encoder.encode(shared_obj)
+  result = encoder.fp.getvalue()
+  print(f'Second encode: {result.hex()}')
+  # Output: d81d01  (just a shared reference to index 1!)
+
+  # Try to decode the second result as standalone CBOR
+  decoder = cbor2.CBORDecoder(BytesIO(result))
+  decoded = decoder.decode()
+  # FAILS: shared reference 1 not found
+  ```
+
+  While primarily a correctness bug, it could cause denial of service if invalid CBOR is transmitted to downstream systems that fail to parse it, or cause silent data corruption if the dangling reference happens to resolve to an unrelated value.
+
+  It can also be considered a memory leak in both the decoder and encoder as references are held that will never be released as long as the decoder/encoder remains alive.
+
+  ### Suggested resolution
+
+  Add dedicated boolean flags to track when an encode/decode operation is in progress. Reset shared state only when the flag is False (top-level call). This ensures state is reset for standalone calls while preserving shared references for nested calls from hooks (which need access to the registry for cyclic structures).
+
+  Decoder (_decoding flag):
+   - decode(): set flag True, reset state, decode, set flag False
+   - decode_from_bytes(): reset state only when flag is False
+
+  Encoder (_encoding flag):
+   - encode(): set flag True, reset state, encode, set flag False
+   - encode_to_bytes(): reset state only when flag is False
+severities:
+  - score: '5.3'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-68131.json
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.12171'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68131
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.1219'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68131
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-wcj4-jw5j-44wh
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/agronholm/cbor2
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/agronholm/cbor2/commit/f1d701cd2c411ee40bb1fe383afe7f365f35abf0
+  - score: '5.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:L/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/agronholm/cbor2/pull/268
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/agronholm/cbor2/pull/268
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2026-01-02T14:22:41Z/
+    published_at: None
+    url: https://github.com/agronholm/cbor2/pull/268
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/agronholm/cbor2/security/advisories/GHSA-wcj4-jw5j-44wh
+  - score: '5.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:L/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/agronholm/cbor2/security/advisories/GHSA-wcj4-jw5j-44wh
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/agronholm/cbor2/security/advisories/GHSA-wcj4-jw5j-44wh
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2026-01-02T14:22:41Z/
+    published_at: None
+    url: https://github.com/agronholm/cbor2/security/advisories/GHSA-wcj4-jw5j-44wh
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68131
+weaknesses:
+  - CWE-212
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-68131.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68131
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-68131
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://github.com/agronholm/cbor2
+    reference_type:
+    reference_id:
+  - url: https://github.com/agronholm/cbor2/commit/f1d701cd2c411ee40bb1fe383afe7f365f35abf0
+    reference_type:
+    reference_id:
+  - url: https://github.com/agronholm/cbor2/pull/268
+    reference_type:
+    reference_id:
+  - url: https://github.com/agronholm/cbor2/security/advisories/GHSA-wcj4-jw5j-44wh
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68131
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2426395
+    reference_type:
+    reference_id: 2426395
+  - url: https://github.com/advisories/GHSA-wcj4-jw5j-44wh
+    reference_type:
+    reference_id: GHSA-wcj4-jw5j-44wh

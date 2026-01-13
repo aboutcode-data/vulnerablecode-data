@@ -1,0 +1,298 @@
+vulnerability_id: VCID-e7aq-w3jh-j3ef
+aliases:
+  - CVE-2025-38398
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  spi: spi-qpic-snand: reallocate BAM transactions
+
+  Using the mtd_nandbiterrs module for testing the driver occasionally
+  results in weird things like below.
+
+  1. swiotlb mapping fails with the following message:
+
+    [   85.926216] qcom_snand 79b0000.spi: swiotlb buffer is full (sz: 4294967294 bytes), total 512 (slots), used 0 (slots)
+    [   85.932937] qcom_snand 79b0000.spi: failure in mapping desc
+    [   87.999314] qcom_snand 79b0000.spi: failure to write raw page
+    [   87.999352] mtd_nandbiterrs: error: write_oob failed (-110)
+
+    Rebooting the board after this causes a panic due to a NULL pointer
+    dereference.
+
+  2. If the swiotlb mapping does not fail, rebooting the board may result
+     in a different panic due to a bad spinlock magic:
+
+    [  256.104459] BUG: spinlock bad magic on CPU#3, procd/2241
+    [  256.104488] Unable to handle kernel paging request at virtual address ffffffff0000049b
+    ...
+
+  Investigating the issue revealed that these symptoms are results of
+  memory corruption which is caused by out of bounds access within the
+  driver.
+
+  The driver uses a dynamically allocated structure for BAM transactions,
+  which structure must have enough space for all possible variations of
+  different flash operations initiated by the driver. The required space
+  heavily depends on the actual number of 'codewords' which is calculated
+  from the pagesize of the actual NAND chip.
+
+  Although the qcom_nandc_alloc() function allocates memory for the BAM
+  transactions during probe, but since the actual number of 'codewords'
+  is not yet know the allocation is done for one 'codeword' only.
+
+  Because of this, whenever the driver does a flash operation, and the
+  number of the required transactions exceeds the size of the allocated
+  arrays the driver accesses memory out of the allocated range.
+
+  To avoid this, change the code to free the initially allocated BAM
+  transactions memory, and allocate a new one once the actual number of
+  'codewords' required for a given NAND chip is known.
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-38398.json
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0498'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04989'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04724'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04754'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04788'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04701'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04708'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04718'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04671'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05661'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05642'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05733'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05755'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05798'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05687'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05625'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0565'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05748'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0575'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05682'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05752'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05632'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06374'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.0636'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06342'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06379'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06345'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06328'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06366'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06435'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06469'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06486'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06481'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06414'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06396'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.0639'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06407'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06389'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06384'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06372'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06383'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06485'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06458'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-38398.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-38398
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/86fb36de1132b560f9305f0c78fa69f459fa0980
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d85d0380292a7e618915069c3579ae23c7c80339
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2383420
+    reference_type:
+    reference_id: 2383420
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-38398
+    reference_type:
+    reference_id: CVE-2025-38398

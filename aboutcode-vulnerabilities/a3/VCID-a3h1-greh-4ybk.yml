@@ -1,0 +1,239 @@
+vulnerability_id: VCID-a3h1-greh-4ybk
+aliases:
+  - CVE-2023-53252
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  Bluetooth: use
+  RCU for hci_conn_params and iterate safely in hci_sync  hci_update_accept_list_sync iterates
+  over hdev->pend_le_conns and hdev->pend_le_reports, and waits for controller events in the
+  loop body, without holding hdev lock.  Meanwhile, these lists and the items may be modified
+  e.g. by le_scan_cleanup. This can invalidate the list cursor or any other item in the list,
+  resulting to invalid behavior (eg use-after-free).  Use RCU for the hci_conn_params action
+  lists. Since the loop bodies in hci_sync block and we cannot use RCU or hdev->lock for the
+  whole loop, copy list items first and then iterate on the copy. Only the flags field is written
+  from elsewhere, so READ_ONCE/WRITE_ONCE should guarantee we read valid values.  Free params
+  everywhere with hci_conn_params_free so the cleanup is guaranteed to be done properly.  This
+  fixes the following, which can be triggered e.g. by BlueZ new mgmt-tester case "Add + Remove
+  Device Nowait - Success", or by changing hci_le_set_cig_params to always return false, and
+  running iso-tester:  ================================================================== BUG:
+  KASAN: slab-use-after-free in hci_update_passive_scan_sync (net/bluetooth/hci_sync.c:2536
+  net/bluetooth/hci_sync.c:2723 net/bluetooth/hci_sync.c:2841) Read of size 8 at addr ffff888001265018
+  by task kworker/u3:0/32  Hardware name: QEMU Standard PC (Q35 + ICH9, 2009), BIOS 1.16.2-1.fc38
+  04/01/2014 Workqueue: hci0 hci_cmd_sync_work Call Trace: <TASK> dump_stack_lvl (./arch/x86/include/asm/irqflags.h:134
+  lib/dump_stack.c:107) print_report (mm/kasan/report.c:320 mm/kasan/report.c:430) ? __virt_addr_valid
+  (./include/linux/mmzone.h:1915 ./include/linux/mmzone.h:2011 arch/x86/mm/physaddr.c:65) ?
+  hci_update_passive_scan_sync (net/bluetooth/hci_sync.c:2536 net/bluetooth/hci_sync.c:2723
+  net/bluetooth/hci_sync.c:2841) kasan_report (mm/kasan/report.c:538) ? hci_update_passive_scan_sync
+  (net/bluetooth/hci_sync.c:2536 net/bluetooth/hci_sync.c:2723 net/bluetooth/hci_sync.c:2841)
+  hci_update_passive_scan_sync (net/bluetooth/hci_sync.c:2536 net/bluetooth/hci_sync.c:2723
+  net/bluetooth/hci_sync.c:2841) ? __pfx_hci_update_passive_scan_sync (net/bluetooth/hci_sync.c:2780)
+  ? mutex_lock (kernel/locking/mutex.c:282) ? __pfx_mutex_lock (kernel/locking/mutex.c:282)
+  ? __pfx_mutex_unlock (kernel/locking/mutex.c:538) ? __pfx_update_passive_scan_sync (net/bluetooth/hci_sync.c:2861)
+  hci_cmd_sync_work (net/bluetooth/hci_sync.c:306) process_one_work (./arch/x86/include/asm/preempt.h:27
+  kernel/workqueue.c:2399) worker_thread (./include/linux/list.h:292 kernel/workqueue.c:2538)
+  ? __pfx_worker_thread (kernel/workqueue.c:2480) kthread (kernel/kthread.c:376) ? __pfx_kthread
+  (kernel/kthread.c:331) ret_from_fork (arch/x86/entry/entry_64.S:314) </TASK>  Allocated by
+  task 31: kasan_save_stack (mm/kasan/common.c:46) kasan_set_track (mm/kasan/common.c:52) __kasan_kmalloc
+  (mm/kasan/common.c:374 mm/kasan/common.c:383) hci_conn_params_add (./include/linux/slab.h:580
+  ./include/linux/slab.h:720 net/bluetooth/hci_core.c:2277) hci_connect_le_scan (net/bluetooth/hci_conn.c:1419
+  net/bluetooth/hci_conn.c:1589) hci_connect_cis (net/bluetooth/hci_conn.c:2266) iso_connect_cis
+  (net/bluetooth/iso.c:390) iso_sock_connect (net/bluetooth/iso.c:899) __sys_connect (net/socket.c:2003
+  net/socket.c:2020) __x64_sys_connect (net/socket.c:2027) do_syscall_64 (arch/x86/entry/common.c:50
+  arch/x86/entry/common.c:80) entry_SYSCALL_64_after_hwframe (arch/x86/entry/entry_64.S:120)  Freed
+  by task 15: kasan_save_stack (mm/kasan/common.c:46) kasan_set_track (mm/kasan/common.c:52)
+  kasan_save_free_info (mm/kasan/generic.c:523) __kasan_slab_free (mm/kasan/common.c:238 mm/kasan/common.c:200
+  mm/kasan/common.c:244) __kmem_cache_free (mm/slub.c:1807 mm/slub.c:3787 mm/slub.c:3800) hci_conn_params_del
+  (net/bluetooth/hci_core.c:2323) le_scan_cleanup (net/bluetooth/hci_conn.c:202) process_one_work
+  (./arch/x86/include/asm/preempt. ---truncated---'
+severities:
+  - score: '6.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:L/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53252.json
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53252.json
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.0351'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02681'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.03511'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02654'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02701'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04532'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04535'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04569'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0446'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04432'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04465'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04496'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04499'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04482'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04264'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04262'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04236'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04344'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04354'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04362'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05104'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05077'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05087'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05068'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05056'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05042'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05052'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05067'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05187'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05163'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05118'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0512'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+  - score: 7
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-820
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53252.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-53252
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2395337
+    reference_type:
+    reference_id: 2395337
+  - url: https://access.redhat.com/errata/RHSA-2024:2394
+    reference_type:
+    reference_id: RHSA-2024:2394

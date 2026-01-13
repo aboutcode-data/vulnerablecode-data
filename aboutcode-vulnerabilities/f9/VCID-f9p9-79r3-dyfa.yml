@@ -1,0 +1,211 @@
+vulnerability_id: VCID-f9p9-79r3-dyfa
+aliases:
+  - CVE-2025-64750
+  - GHSA-wwrx-w7c9-rf87
+summary: |
+  Singluarity ineffectively applies selinux / apparmor LSM process labels
+  ### Impact
+
+  _**Native Mode (default)**_
+
+  Singularity's default native runtime allows users to apply restrictions to container processes using the apparmor or selinux Linux Security Modules (LSMs), via the `--security selinux:<label>` or `--security apparmor:<profile>` flags.
+
+  LSM labels are written to process or thread `attrs/exec` under `/proc`. If a user relies on LSM restrictions to prevent malicious operations then, under certain circumstances, an attacker can redirect the LSM label write operation so that it is ineffective. This requires:
+
+  * The attacker to cause the user to run a malicious container image that redirects the mount of `/proc` to the destination of a shared mount, either known to be configured on the target system, or that will be specified by the user when running the container.
+  * Control of the content of the shared mount, for example through another malicious container which also binds it, or as a user with relevant permissions on the host system it is bound from.
+
+  Note that Singularity does not attempt to prevent damaging operations, or container escape, from containers that are started as the host root user. When a non-root user starts a container any LSM writes to /proc are performed as that user. For these reasons, the denial-of-service and container escape attacks detailed in [runc CVE-2025-52881](https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm) are not relevant. Processes running in non-root containers are subject to the standard permissions for the non-root account used, and cannot escalate privilege, even when intended container-specific LSM labels are not correctly applied.
+
+  In addition, a bug in the detection of selinux support in Singularity's default setuid flow means that `--security selinux:<label>` flags may not be applied, even in the absence of an attack  - but in this case a warning message is emitted, indicating that selinux is unavailable. This warning may be may be overlooked, mis-interpreted, or not seen when singularity is run from a script or other tool. Failure to apply requested restrictions should result in a fatal error, rather than a warning message.
+
+  _**OCI-Mode**_
+
+  Singularity's OCI-mode is unaffected as it does not currently support applying LSM restrictions via the `--security` flag.
+
+  ### Patches
+
+  Ineffective write of selinux process labels is addressed via an update to the containers/selinux dependency in https://github.com/sylabs/singularity/pull/3850. This update brings in the upstream fix for CVE-2025-52881 in this dependency.
+
+  Ineffective write of apparmor process labels is addressed in commit 5af3e79.
+
+  Failure to detect apparmor / selinux support, when `--security` flags are provided, is made an error rather than a warning in commit 2788296.
+
+  ### Workarounds
+
+  There are no known workarounds, other than to define system-wide apparmor / selinux policy for Singularity itself. This would apply to all containers, not just those run with the `--security` flags. Additionally, restrictions that are reasonable to apply to container processes may impact the functionality of Singularity.
+
+  ### References
+
+  Related vulnerabilities in runc:
+
+  * [runc CVE-2025-52881](https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm)
+  * [runc CVE-2019-19921](https://github.com/advisories/GHSA-fh74-hm69-rqjw)
+severities:
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.02058'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64750
+  - score: '0.00014'
+    scoring_system: epss
+    scoring_elements: '0.02078'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64750
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/advisories/GHSA-fh74-hm69-rqjw
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-fh74-hm69-rqjw
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/advisories/GHSA-fh74-hm69-rqjw
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/sylabs/singularity
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sylabs/singularity
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/27882963879a7af1699fd6511c3f5f1371d80f33
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/27882963879a7af1699fd6511c3f5f1371d80f33
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/27882963879a7af1699fd6511c3f5f1371d80f33
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/5af3e790c40593591dfc26d0692e4d4b21c29ba0
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/5af3e790c40593591dfc26d0692e4d4b21c29ba0
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/sylabs/singularity/commit/5af3e790c40593591dfc26d0692e4d4b21c29ba0
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/sylabs/singularity/pull/3850
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sylabs/singularity/pull/3850
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/sylabs/singularity/pull/3850
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://github.com/sylabs/singularity/security/advisories/GHSA-wwrx-w7c9-rf87
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sylabs/singularity/security/advisories/GHSA-wwrx-w7c9-rf87
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-02T17:47:25Z/
+    published_at: None
+    url: https://github.com/sylabs/singularity/security/advisories/GHSA-wwrx-w7c9-rf87
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-64750
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-64750
+  - score: '4.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:L
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-4177
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-4177
+weaknesses:
+  - CWE-706
+  - CWE-61
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-64750
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-fh74-hm69-rqjw
+    reference_type:
+    reference_id:
+  - url: https://github.com/opencontainers/runc/security/advisories/GHSA-cgrx-mc8f-2prm
+    reference_type:
+    reference_id:
+  - url: https://github.com/sylabs/singularity
+    reference_type:
+    reference_id:
+  - url: https://github.com/sylabs/singularity/commit/27882963879a7af1699fd6511c3f5f1371d80f33
+    reference_type:
+    reference_id:
+  - url: https://github.com/sylabs/singularity/commit/5af3e790c40593591dfc26d0692e4d4b21c29ba0
+    reference_type:
+    reference_id:
+  - url: https://github.com/sylabs/singularity/pull/3850
+    reference_type:
+    reference_id:
+  - url: https://github.com/sylabs/singularity/security/advisories/GHSA-wwrx-w7c9-rf87
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-64750
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2025-4177
+    reference_type:
+    reference_id:
+  - url: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1121843
+    reference_type:
+    reference_id: 1121843
