@@ -1,0 +1,173 @@
+vulnerability_id: VCID-7yfu-3j54-c3cq
+aliases:
+  - CVE-2025-67750
+  - GHSA-55jh-84jv-8mx8
+summary: |
+  Lightning Flow Scanner Vulnerable to Code Injection via Unsafe Use of `new Function()` in APIVersion Rule
+  ### Impact
+  The APIVersion rule uses `new Function()` to evaluate expression strings. A malicious crafted flow metadata file can cause arbitrary JavaScript execution during scanning. An attacker could execute arbitrary JavaScript during a scan by supplying a malicious expression within rule configuration or crafted flow metadata. This could compromise developer machines, CI runners, or editor environments.
+
+  ### Patches
+  The patch removes all uses of `new Function()` and replaces them with a safer parser. It now validates operators (`>`, >=`, `<`, `<=`, `==`) and performs numeric comparisons without evaluating untrusted JavaScript.
+
+  **version:** core-v6.10.6,
+  **version vsx:**: v2.4.4
+  **version app:**: v3.1.0
+
+  ### Work around
+
+  ```
+  // --- Handle APIVersion rule separately to avoid unsafe-eval in the core library ---
+        const apiVersionConfig = ruleConfig.rules.APIVersion;
+        if (apiVersionConfig) {
+          delete ruleConfig.rules.APIVersion;
+        }
+
+  // Manually evaluate the APIVersion rule, if it was configured.
+        if (apiVersionConfig) {
+          const flowApiVer = this.currentFlow.apiVersion || this.currentFlow.xmlData?.apiVersion;
+          const apiVersionRuleDef = allRules.find(r => r.name === "APIVersion");
+
+          // Determine the required expression (e.g. ">=58").
+          let requiredExpr;
+          if (apiVersionConfig.expression) {
+            requiredExpr = apiVersionConfig.expression;
+          } else if (apiVersionConfig.threshold != null) {
+            requiredExpr = `>=${apiVersionConfig.threshold}`;
+          }
+
+          if (requiredExpr) {
+            const minVer = parseInt(requiredExpr.replace(/[^0-9]/g, ""), 10);
+            const operator = requiredExpr.replace(/[0-9]/g, "").trim();
+            const operators = {
+              ">=": (a, b) => a < b,
+              "<": (a, b) => a >= b,
+              ">": (a, b) => a <= b,
+              "<=": (a, b) => a > b,
+              "==": (a, b) => a !== b,
+              "=": (a, b) => a !== b
+            };
+            const violation = operators[operator] ? operators[operator](flowApiVer, minVer) : flowApiVer < minVer;
+
+            if (violation) {
+              // Craft a result object that mimics the core scanner output so downstream logic remains unchanged.
+              const manualScanResult = [{
+                flow: parsedFlow,
+                ruleResults: [{
+                  ruleName: "APIVersion",
+                  ruleDefinition: {
+                    description: apiVersionRuleDef?.description || "API Version check",
+                    label: apiVersionRuleDef?.label || "APIVersion"
+                  },
+                  occurs: true,
+                  severity: apiVersionConfig.severity,
+                  details: [{
+                    name: String(flowApiVer),
+                    type: "apiVersion",
+                    expression: requiredExpr
+                  }]
+                }]
+              }];
+              results.push(...this.processScanResults(manualScanResult));
+            }
+          }
+        }
+
+  ```
+severities:
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06861'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-67750
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06822'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-67750
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-55jh-84jv-8mx8
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/commit/10f64a5eb193d8a777e453b25e910144e4540795
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/commit/10f64a5eb193d8a777e453b25e910144e4540795
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/releases/tag/core-v6.10.6
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/releases/tag/core-v6.10.6
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/security/advisories/GHSA-55jh-84jv-8mx8
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/security/advisories/GHSA-55jh-84jv-8mx8
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Flow-Scanner/lightning-flow-scanner/security/advisories/GHSA-55jh-84jv-8mx8
+  - score: '8.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-67750
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-67750
+weaknesses:
+  - CWE-94
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-67750
+    reference_type:
+    reference_id:
+  - url: https://github.com/Flow-Scanner/lightning-flow-scanner
+    reference_type:
+    reference_id:
+  - url: https://github.com/Flow-Scanner/lightning-flow-scanner/commit/10f64a5eb193d8a777e453b25e910144e4540795
+    reference_type:
+    reference_id:
+  - url: https://github.com/Flow-Scanner/lightning-flow-scanner/releases/tag/core-v6.10.6
+    reference_type:
+    reference_id:
+  - url: https://github.com/Flow-Scanner/lightning-flow-scanner/security/advisories/GHSA-55jh-84jv-8mx8
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-67750
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-55jh-84jv-8mx8
+    reference_type:
+    reference_id: GHSA-55jh-84jv-8mx8

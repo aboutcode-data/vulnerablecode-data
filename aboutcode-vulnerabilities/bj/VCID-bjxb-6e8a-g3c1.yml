@@ -1,0 +1,463 @@
+vulnerability_id: VCID-bjxb-6e8a-g3c1
+aliases:
+  - CVE-2025-53621
+  - GHSA-jjwr-5cfh-7xwh
+summary: |
+  DSpace is vulnerable to XML External Entity injection during archive imports
+  ### Impact
+
+  Two related XXE injection possibilities have been discovered, **impacting all versions of DSpace prior to 7.6.4, 8.2 and 9.1**.
+
+  1. External entities are not disabled when parsing XML files during import of an archive (in [Simple Archive Format](https://wiki.lyrasis.org/pages/viewpage.action?pageId=104566653)), either from command-line (`./dspace import` command) or from the "Batch Import (Zip)" user interface feature.  _(Likely impacts all versions of DSpace 1.x <= 7.6.3, 8.0 <= 8.1, and 9.0)_
+  2. External entities are also not explicitly disabled when parsing XML responses from some upstream services (ArXiv, Crossref, OpenAIRE, Creative Commons) used in [import from external sources](https://wiki.lyrasis.org/pages/viewpage.action?pageId=104566672) via the user interface or REST API. _(Impacts all versions of DSpace 7.0 <= 7.6.3, 8.0 <= 8.1 and 9.0)_
+
+  An XXE injection in these files may result in a connection being made to an attacker's site or a local path readable by the Tomcat user, with content potentially being injected into a metadata field. In the latter case, this may result in sensitive content disclosure, including retrieving arbitrary files or configurations from the server where DSpace is running or content from remote URLs. The ability to include content from a remote URL could result in a request forgery attack, and disclosure of sensitive information in the  response.
+
+  **The Simple Archive Format (SAF) importer / Batch Import (Zip) is only usable by site administrators** (from user interface / REST API) or system administrators (from command-line).  Therefore, to exploit this vulnerability, the malicious payload would have to be provided by an attacker and trusted by an administrator (who would trigger the import).
+  * **The most severe practical impact** is a case where an attacker obtains DSpace administrator credentials and uses the Batch Import feature with a malicious SAF archive to expose sensitive local files readable by the Tomcat user, or secrets and access tokens from an authenticated service via request forgery.
+  * An attacker without administrative credentials might use some other tactic to convince an administrator to import a malicious SAF archive they have supplied.
+
+  **The Import from External Sources feature has a narrower attack vector**.  While this feature is usable by any DSpace Submitter, the malicious payload must be provided *by the external source* (e.g. arXiv, Crossref, OpenAIRE, or Creative Commons).  No known method exists for an attacker to inject XXE via content uploads. Instead, the service itself would need to be compromised in such a way that it would inject a malicious payload into its API response.
+
+  ### Patches
+
+  The fix is included in DSpace 7.6.4, 8.2 and 9.1. Please upgrade to one of these versions.
+
+  If you cannot upgrade immediately, it is possible to manually patch your DSpace backend. (No changes are necessary to the frontend.)  A pull request exists which can be used to patch systems running DSpace 7.6.x, 8.x or 9.0. This pull request provides central methods to retrieve Java XML, SAX, JAXB XML document builders with safe default settings, including XXE protection.
+  * Pull request for 7.x: https://github.com/DSpace/DSpace/pull/11032 ([Downloadable patch file](https://github.com/DSpace/DSpace/pull/11032.patch))
+  * Pull request for 8.x: https://github.com/DSpace/DSpace/pull/11034 ([Downloadable patch file](https://github.com/DSpace/DSpace/pull/11034.patch))
+  * Pull request for 9.0: https://github.com/DSpace/DSpace/pull/11035 ([Downloadable patch file](https://github.com/DSpace/DSpace/pull/11035.patch))
+
+  #### Apply the patch to your DSpace
+  If at all possible, we recommend upgrading your DSpace site based on the upgrade instructions. However, if you are unable to do so, you can manually apply the above patches to your DSpace backend as follows:
+  1. Download the appropriate patch file to the machine where DSpace backend is running
+  2. From the `[dspace-src]` folder, apply the patch, e.g. `git apply [name-of-file].patch`
+  3. Now, update your DSpace site (based loosely on the Upgrade instructions). This generally involves three steps:
+      1. Rebuild DSpace, e.g. `mvn -U clean package`  (This will recompile all DSpace backend code)
+      2. Redeploy DSpace, e.g. `ant update`  (This will copy all newly built code to your installation directory). Depending on your setup you also may need to copy the updated "server" webapp over to your Tomcat webapps folder.
+      3. Restart Tomcat (or runnable JAR)
+
+  ### Workarounds
+  **Patching the system is the recommended fix.** It is not possible to fully protect your system via workarounds.
+
+  That said, until you are able to patch your system or upgrade, you can apply these best practices:
+  * Administrators must carefully inspect any SAF archives (they did not construct themselves) before importing.  If SAF archives are too large to manually inspect, you should avoid importing them until your site is patched.
+  * As necessary, affected external services can be disabled (see [documentation](https://wiki.lyrasis.org/pages/viewpage.action?pageId=104566672)) to mitigate the ability for a malicious payload to be delivered via external service APIs.
+
+
+  ### Credits
+  Discovered & reported by Pablo Picurelli Ortiz (@superpegaso2703)
+  Code fix developed by Kim Shepherd (@kshepherd) of The Library Code
+
+  ### For more information
+  * [XXE Cheat Sheet / Explanations](https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html)
+  * If you have any questions or comments about this advisory, please contact us at [security@dspace.org](mailto:security@dspace.org)
+severities:
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.15075'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00048'
+    scoring_system: epss
+    scoring_elements: '0.15058'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.1978'
+    published_at: '2025-07-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19776'
+    published_at: '2025-07-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00062'
+    scoring_system: epss
+    scoring_elements: '0.19775'
+    published_at: '2025-07-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21107'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21082'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21283'
+    published_at: '2025-07-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21239'
+    published_at: '2025-07-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.2114'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21134'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22813'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22824'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22799'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23062'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22962'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.23032'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22922'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22965'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22967'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22917'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00074'
+    scoring_system: epss
+    scoring_elements: '0.22921'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25528'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.256'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25688'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25678'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25736'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25723'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25711'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25794'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25774'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25779'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25605'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25572'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25581'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25537'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25591'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25589'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25579'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25574'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25497'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25569'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25557'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.2556'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25568'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25602'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25531'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-jjwr-5cfh-7xwh
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032.patch
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032.patch
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11032.patch
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034.patch
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034.patch
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11034.patch
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035.patch
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035.patch
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/pull/11035.patch
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://github.com/DSpace/DSpace/security/advisories/GHSA-jjwr-5cfh-7xwh
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/security/advisories/GHSA-jjwr-5cfh-7xwh
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/DSpace/DSpace/security/advisories/GHSA-jjwr-5cfh-7xwh
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-15T14:57:02Z/
+    published_at: None
+    url: https://github.com/DSpace/DSpace/security/advisories/GHSA-jjwr-5cfh-7xwh
+  - score: '6.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:R/S:C/C:H/I:N/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-53621
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-53621
+weaknesses:
+  - CWE-611
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-53621
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11032
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11032.patch
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11034
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11034.patch
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11035
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/pull/11035.patch
+    reference_type:
+    reference_id:
+  - url: https://github.com/DSpace/DSpace/security/advisories/GHSA-jjwr-5cfh-7xwh
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-53621
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-jjwr-5cfh-7xwh
+    reference_type:
+    reference_id: GHSA-jjwr-5cfh-7xwh

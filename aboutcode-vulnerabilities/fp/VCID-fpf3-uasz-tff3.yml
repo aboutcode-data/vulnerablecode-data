@@ -1,0 +1,60 @@
+vulnerability_id: VCID-fpf3-uasz-tff3
+aliases:
+  - CVE-2023-54012
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  net: fix stack
+  overflow when LRO is disabled for virtual interfaces  When the virtual interface''s feature
+  is updated, it synchronizes the updated feature for its own lower interface. This propagation
+  logic should be worked as the iteration, not recursively. But it works recursively due to
+  the netdev notification unexpectedly. This problem occurs when it disables LRO only for the
+  team and bonding interface type.         team0          |   +------+------+-----+-----+   |      |      |     |     |
+  team1  team2  team3  ...  team200  If team0''s LRO feature is updated, it generates the NETDEV_FEAT_CHANGE
+  event to its own lower interfaces(team1 ~ team200). It is worked by netdev_sync_lower_features().
+  So, the NETDEV_FEAT_CHANGE notification logic of each lower interface work iteratively. But
+  generated NETDEV_FEAT_CHANGE event is also sent to the upper interface too. upper interface(team0)
+  generates the NETDEV_FEAT_CHANGE event for its own lower interfaces again. lower and upper
+  interfaces receive this event and generate this event again and again. So, the stack overflow
+  occurs.  But it is not the infinite loop issue. Because the netdev_sync_lower_features() updates
+  features before generating the NETDEV_FEAT_CHANGE event. Already synchronized lower interfaces
+  skip notification logic. So, it is just the problem that iteration logic is changed to the
+  recursive unexpectedly due to the notification mechanism.  Reproducer:  ip link add team0
+  type team ethtool -K team0 lro on for i in {1..200} do         ip link add team$i master team0
+  type team         ethtool -K team$i lro on done  ethtool -K team0 lro off  In order to fix
+  it, the notifier_ctx member of bonding/team is introduced.'
+severities:
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54012.json
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11914'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54012
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11926'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54012
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54012.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-54012
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-54012
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2424935
+    reference_type:
+    reference_id: 2424935

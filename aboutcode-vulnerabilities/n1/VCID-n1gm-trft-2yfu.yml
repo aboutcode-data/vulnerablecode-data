@@ -1,0 +1,105 @@
+vulnerability_id: VCID-n1gm-trft-2yfu
+aliases:
+  - GHSA-x732-6j76-qmhm
+summary: |
+  Better Auth's rou3 Dependency has Double-Slash Path Normalization which can Bypass disabledPaths Config and Rate Limits
+  ## Summary
+
+  An issue in the underlying router library **rou3** can cause `/path` and `//path` to be treated as identical routes. If your environment does **not** normalize incoming URLs (e.g., by collapsing multiple slashes), this can allow bypasses of `disabledPaths` and path-based rate limits.
+
+  ## Details
+
+  Better Auth uses **better-call**, which internally relies on **rou3** for routing. Affected versions of rou3 normalize paths by removing empty segments. As a result:
+
+  * `/sign-in/email`
+  * `//sign-in/email`
+  * `///sign-in/email`
+
+  …all resolve to the same route.
+
+  Some production setups *automatically* collapse multiple slashes. This includes:
+
+  * Vercel with Nextjs (default)
+  * Cloudflare - when normalize to urls origin is enabled (https://developers.cloudflare.com/rules/normalization/settings/#normalize-urls-to-origin)
+
+  In these environments and other configurations where `//path` reach Better Auth as `/path`, the issue does not apply.
+
+  ## Fix
+
+  Updating rou3 to the latest version resolves the issue:
+
+  * better-call previously depended on `"rou3": "^0.5.1"`
+  * The fix was introduced after that version
+    (commit: [https://github.com/h3js/rou3/commit/f60b43fa648399534507c9ac7db36d705b8874c3](https://github.com/h3js/rou3/commit/f60b43fa648399534507c9ac7db36d705b8874c3))
+
+  Better Auth recommends:
+
+  1. **Upgrading to Better Auth v1.4.5 or later**, which includes the updated rou3.
+  2. Ensuring the proxy normalizes URLs.
+  3. If project maintainers cannot upgrade yet, they can protect their app by normalizing url before it reaches better-auth handler. See example below:
+  ```ts
+  const req = new Request(...) // this would be the actual request object
+  const url = new URL(req.url);
+  const normalizedPath = url.pathname.replace(/\/+/g, "/");
+
+  if (url.pathname !== normalizedPath) {
+    url.pathname = normalizedPath;
+    // Update the raw request pathname
+    Object.defineProperty(req, "url", {
+      value: url.toString(),
+      writable: true,
+      configurable: true,
+    });
+  }
+  ```
+
+  ## Impact
+
+  * Bypass `disabledPaths`
+  * Bypass path-based rate limits
+
+  The impact of bypassing disabled paths could vary based on a project's configuration.
+severities:
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-x732-6j76-qmhm
+  - score: '8.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H
+    published_at: None
+    url: https://github.com/better-auth/better-auth
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/better-auth/better-auth
+  - score: '8.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H
+    published_at: None
+    url: https://github.com/better-auth/better-auth/security/advisories/GHSA-x732-6j76-qmhm
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/better-auth/better-auth/security/advisories/GHSA-x732-6j76-qmhm
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/better-auth/better-auth/security/advisories/GHSA-x732-6j76-qmhm
+weaknesses:
+  - CWE-400
+  - CWE-41
+references:
+  - url: https://github.com/better-auth/better-auth
+    reference_type:
+    reference_id:
+  - url: https://github.com/better-auth/better-auth/security/advisories/GHSA-x732-6j76-qmhm
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-x732-6j76-qmhm
+    reference_type:
+    reference_id: GHSA-x732-6j76-qmhm

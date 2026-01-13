@@ -1,0 +1,55 @@
+vulnerability_id: VCID-w5vp-rc31-nyfx
+aliases:
+  - CVE-2023-54068
+summary: "In the Linux kernel, the following vulnerability has been resolved:  f2fs: compress:\
+  \ fix to call f2fs_wait_on_page_writeback() in f2fs_write_raw_pages()  BUG_ON() will be triggered\
+  \ when writing files concurrently, because the same page is writtenback multiple times.  1597\
+  \ void folio_end_writeback(struct folio *folio) 1598 { \t\t...... 1618     if (!__folio_end_writeback(folio))\
+  \ 1619         BUG(); \t\t...... 1625 }  kernel BUG at mm/filemap.c:1619! Call Trace:  <TASK>\
+  \  f2fs_write_end_io+0x1a0/0x370  blk_update_request+0x6c/0x410  blk_mq_end_request+0x15/0x130\
+  \  blk_complete_reqs+0x3c/0x50  __do_softirq+0xb8/0x29b  ? sort_range+0x20/0x20  run_ksoftirqd+0x19/0x20\
+  \  smpboot_thread_fn+0x10b/0x1d0  kthread+0xde/0x110  ? kthread_complete_and_exit+0x20/0x20\
+  \  ret_from_fork+0x22/0x30  </TASK>  Below is the concurrency scenario:  [Process A]\t\t[Process\
+  \ B]\t\t[Process C] f2fs_write_raw_pages()   - redirty_page_for_writepage()   - unlock page()\
+  \ \t\t\tf2fs_do_write_data_page() \t\t\t  - lock_page() \t\t\t  - clear_page_dirty_for_io()\
+  \ \t\t\t  - set_page_writeback() [1st writeback] \t\t\t    ..... \t\t\t    - unlock page()\
+  \  \t\t\t\t\t\tgeneric_perform_write() \t\t\t\t\t\t  - f2fs_write_begin() \t\t\t\t\t\t   \
+  \ - wait_for_stable_page()  \t\t\t\t\t\t  - f2fs_write_end() \t\t\t\t\t\t    - set_page_dirty()\
+  \    - lock_page()     - f2fs_do_write_data_page()       - set_page_writeback() [2st writeback]\
+  \  This problem was introduced by the previous commit 7377e853967b (\"f2fs: compress: fix\
+  \ potential deadlock of compress file\"). All pagelocks were released in f2fs_write_raw_pages(),\
+  \ but whether the page was in the writeback state was ignored in the subsequent writing process.\
+  \ Let's fix it by waiting for the page to writeback before writing."
+severities:
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.0895'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54068
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.08909'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54068
+  - score: '6.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54068.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-54068
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-54068
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2425072
+    reference_type:
+    reference_id: 2425072

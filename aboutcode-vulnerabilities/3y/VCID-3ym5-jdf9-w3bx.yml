@@ -1,0 +1,188 @@
+vulnerability_id: VCID-3ym5-jdf9-w3bx
+aliases:
+  - CVE-2025-48044
+  - GHSA-pcxq-fjp3-r752
+summary: "Ash has authorization bypass when bypass policy condition evaluates to true\n### Summary\n\
+  Bypass policies incorrectly authorize requests when their condition evaluates to true but\
+  \ their authorization checks fail and no other policies apply.\n\n### Impact\nResources with\
+  \ bypass policies can be accessed without proper authorization when:\n- Bypass condition evaluates\
+  \ to true\n- Bypass authorization checks fail\n- Other policies exist but their conditions\
+  \ don't match\n\n### Details\nVulnerable code in: [lib/ash/policy/policy.ex:69](https://github.com/ash-project/ash/blob/b2e4d625/lib/ash/policy/policy.ex#L69)\n\
+  \n```elixir\n{%{bypass?: true}, cond_expr, complete_expr}, {one_condition_matches, all_policies_match}\
+  \ ->\n  {\n    b(cond_expr or one_condition_matches),  # <- Bug: uses condition only\n   \
+  \ b(complete_expr or all_policies_match)\n  }\n```\n\nThe final authorization decision is:\
+  \ `one_condition_matches AND all_policies_match`\n\nWhen a bypass condition is true but bypass\
+  \ policies fail, and subsequent policies have non-matching conditions:\n\n1. **one_condition_matches**\
+  \ = `cond_expr` (bypass condition) = **true** (bug - should check if bypass actually authorizes)\n\
+  2. **all_policies_match** = `(complete_expr OR NOT cond_expr)` for each policy\n   - For non-matching\
+  \ policies: `(false OR NOT false)` = **true** (policies don't apply)\n3. **Final**: `true\
+  \ AND true` = **true** (incorrectly authorized)\n\nThe bypass condition alone satisfies \"\
+  at least one policy applies\" even though the bypass fails to authorize.\n\n### Fix\nReplace\
+  \ `cond_expr` with `complete_expr` on line 69:\n```elixir\n{%{bypass?: true}, _cond_expr,\
+  \ complete_expr}, {one_condition_matches, all_policies_match} ->\n  {\n    b(complete_expr\
+  \ or one_condition_matches),  # <- Fixed\n    b(complete_expr or all_policies_match)\n  }\n\
+  ```\n\nLine 52 should also be updated for consistency (though it's only triggered when bypass\
+  \ is the last policy, making it coincidentally safe in practice):\n```elixir\n{%{bypass?:\
+  \ true}, _cond_expr, complete_expr}, {one_condition_matches, true} ->\n  {\n    b(complete_expr\
+  \ or one_condition_matches),  # <- For consistency\n    complete_expr\n  }\n```\n\n### PoC\n\
+  ```elixir\npolicies do\n  bypass always() do\n    authorize_if actor_attribute_equals(:is_admin,\
+  \ true)\n  end\n\n  policy action_type(:read) do\n    authorize_if always()\n  end\nend\n\
+  ```\n\nNon-admin user can perform create actions (should be denied).\n\nTest demonstrating\
+  \ the bug:\n```elixir\ntest \"bypass policy bug\" do\n  policies = [\n    %Ash.Policy.Policy{\n\
+  \      bypass?: true,\n      condition: [{Ash.Policy.Check.Static, result: true}],  # condition\
+  \ = true\n      policies: [\n        %Ash.Policy.Check{\n          type: :authorize_if,\n\
+  \          check: {Ash.Policy.Check.Static, result: false},  # policies = false\n        \
+  \  check_module: Ash.Policy.Check.Static,\n          check_opts: [result: false]\n       \
+  \ }\n      ]\n    },\n    %Ash.Policy.Policy{\n      bypass?: false,\n      condition: [{Ash.Policy.Check.Static,\
+  \ result: false}],\n      policies: [\n        %Ash.Policy.Check{\n          type: :authorize_if,\n\
+  \          check: {Ash.Policy.Check.Static, result: true},\n          check_module: Ash.Policy.Check.Static,\n\
+  \          check_opts: [result: true]\n        }\n      ]\n    }\n  ]\n\n  expression = Ash.Policy.Policy.expression(policies,\
+  \ %{})\n  \n  assert expression == false\n  # Expected: false (deny)\n  # Actual on main:\
+  \ true (incorrectly authorized)\nend\n```"
+severities:
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21107'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21154'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21193'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21444'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21446'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21474'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21447'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21491'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.2145'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21465'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21461'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00125'
+    scoring_system: epss
+    scoring_elements: '0.32477'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '0.00125'
+    scoring_system: epss
+    scoring_elements: '0.32449'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/ash-project/ash
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/8b83efa225f657bfc3656ad8ee8485f9b2de923d
+  - score: '8.6'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/8b83efa225f657bfc3656ad8ee8485f9b2de923d
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/8b83efa225f657bfc3656ad8ee8485f9b2de923d
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:Y/T:T/P:M/B:A/M:M/D:T/2025-10-20T18:42:50Z/
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/8b83efa225f657bfc3656ad8ee8485f9b2de923d
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-pcxq-fjp3-r752
+  - score: '8.6'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-pcxq-fjp3-r752
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-pcxq-fjp3-r752
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:Y/T:T/P:M/B:A/M:M/D:T/2025-10-20T18:42:50Z/
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-pcxq-fjp3-r752
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-48044
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-48044
+weaknesses:
+  - CWE-863
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-48044
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash/commit/8b83efa225f657bfc3656ad8ee8485f9b2de923d
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash/security/advisories/GHSA-pcxq-fjp3-r752
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-48044
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*

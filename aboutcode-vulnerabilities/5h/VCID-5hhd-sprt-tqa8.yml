@@ -1,0 +1,155 @@
+vulnerability_id: VCID-5hhd-sprt-tqa8
+aliases:
+  - CVE-2025-39945
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  cnic: Fix use-after-free
+  bugs in cnic_delete_task  The original code uses cancel_delayed_work() in cnic_cm_stop_bnx2x_hw(),
+  which does not guarantee that the delayed work item ''delete_task'' has fully completed if
+  it was already running. Additionally, the delayed work item is cyclic, the flush_workqueue()
+  in cnic_cm_stop_bnx2x_hw() only blocks and waits for work items that were already queued to
+  the workqueue prior to its invocation. Any work items submitted after flush_workqueue() is
+  called are not included in the set of tasks that the flush operation awaits. This means that
+  after the cyclic work items have finished executing, a delayed work item may still exist in
+  the workqueue. This leads to use-after-free scenarios where the cnic_dev is deallocated by
+  cnic_free_dev(), while delete_task remains active and attempt to dereference cnic_dev in cnic_delete_task().  A
+  typical race condition is illustrated below:  CPU 0 (cleanup)              | CPU 1 (delayed
+  work callback) cnic_netdev_event()          |   cnic_stop_hw()             | cnic_delete_task()     cnic_cm_stop_bnx2x_hw()  |
+  ...       cancel_delayed_work()  | /* the queue_delayed_work()       flush_workqueue()      |    executes
+  after flush_workqueue()*/                              | queue_delayed_work()   cnic_free_dev(dev)//free   |
+  cnic_delete_task() //new instance                              |   dev = cp->dev; //use  Replace
+  cancel_delayed_work() with cancel_delayed_work_sync() to ensure that the cyclic delayed work
+  item is properly canceled and that any ongoing execution of the work item completes before
+  the cnic_dev is deallocated. Furthermore, since cancel_delayed_work_sync() uses __flush_work(work,
+  true) to synchronously wait for any currently executing instance of the work item to finish,
+  the flush_workqueue() becomes redundant and should be removed.  This bug was identified through
+  static analysis. To reproduce the issue and validate the fix, I simulated the cnic PCI device
+  in QEMU and introduced intentional delays — such as inserting calls to ssleep() within the
+  cnic_delete_task() function — to increase the likelihood of triggering the bug.'
+severities:
+  - score: '5.8'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39945.json
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39945.json
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04959'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04964'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04935'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07843'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07813'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07796'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07906'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.0784'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.0783'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07833'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07847'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07893'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07923'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07837'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07895'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07909'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07903'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21564'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21619'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+  - score: '6.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-362
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39945.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-39945
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-39945
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2401412
+    reference_type:
+    reference_id: 2401412

@@ -1,0 +1,55 @@
+vulnerability_id: VCID-24fh-y35h-efe8
+aliases:
+  - CVE-2023-54321
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  driver core:
+  fix potential null-ptr-deref in device_add()  I got the following null-ptr-deref report while
+  doing fault injection test:  BUG: kernel NULL pointer dereference, address: 0000000000000058
+  CPU: 2 PID: 278 Comm: 37-i2c-ds2482 Tainted: G    B   W        N 6.1.0-rc3+ RIP: 0010:klist_put+0x2d/0xd0
+  Call Trace:  <TASK>  klist_remove+0xf1/0x1c0  device_release_driver_internal+0x196/0x210  bus_remove_device+0x1bd/0x240  device_add+0xd3d/0x1100  w1_add_master_device+0x476/0x490
+  [wire]  ds2482_probe+0x303/0x3e0 [ds2482]  This is how it happened:  w1_alloc_dev()   // The
+  dev->driver is set to w1_master_driver.   memcpy(&dev->dev, device, sizeof(struct device));   device_add()     bus_add_device()     dpm_sysfs_add()
+  // It fails, calls bus_remove_device.      // error path     bus_remove_device()       //
+  The dev->driver is not null, but driver is not bound.       __device_release_driver()         klist_remove(&dev->p->knode_driver)
+  <-- It causes null-ptr-deref.      // normal path     bus_probe_device() // It''s not called
+  yet.       device_bind_driver()  If dev->driver is set, in the error path after calling bus_add_device()
+  in device_add(), bus_remove_device() is called, then the device will be detached from driver.
+  But device_bind_driver() is not called yet, so it causes null-ptr-deref while access the ''knode_driver''.
+  To fix this, set dev->driver to null in the error path before calling bus_remove_device().'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54321.json
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.05589'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54321
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.05572'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54321
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54321.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-54321
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-54321
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2426138
+    reference_type:
+    reference_id: 2426138

@@ -1,0 +1,138 @@
+vulnerability_id: VCID-yfy3-7dzs-abge
+aliases:
+  - GHSA-g7f3-828f-7h7m
+summary: |
+  Authlib : JWE zip=DEF decompression bomb enables DoS
+  ### Summary
+  _Authlib’s JWE `zip=DEF` path performs unbounded DEFLATE decompression. A very small ciphertext can expand into tens or hundreds of megabytes on decrypt, allowing an attacker who can supply decryptable tokens to exhaust memory and CPU and cause denial of service._
+
+  ### Details
+  - Affected component: Authlib JOSE, JWE `zip=DEF` (DEFLATE) support.
+  - In `authlib/authlib/jose/rfc7518/jwe_zips.py`, `DeflateZipAlgorithm.decompress` calls `zlib.decompress(s, -zlib.MAX_WBITS)` without a maximum output limit. This permits unbounded expansion of compressed payloads.
+  - In the JWE decode flow (`authlib/authlib/jose/rfc7516/jwe.py`), when the protected header contains `"zip": "DEF"`, the library routes the decrypted ciphertext into the `decompress` method and assigns the fully decompressed bytes to the plaintext field before returning it. No streaming limit or quota is applied.
+  - Because DEFLATE achieves extremely high ratios on highly repetitive input, an attacker can craft a tiny `zip=DEF` ciphertext that inflates to a very large plaintext during decrypt, spiking RSS and CPU. Repeated requests can starve the process or host.
+
+  Code references (from this repository version):
+  - `authlib/authlib/jose/rfc7518/jwe_zips.py` – `DeflateZipAlgorithm.decompress` uses unbounded `zlib.decompress`.
+  - `authlib/authlib/jose/rfc7516/jwe.py` – JWE decode path applies `zip_.decompress(msg)` when `zip=DEF` is present in the header.
+
+  Contrast: The `joserfc` project guards `zip=DEF` decompression with a fixed maximum (256 KB) and raises `ExceededSizeError` if output would exceed this limit, preventing the bomb. Authlib lacks such a guard in this codebase snapshot.
+
+  ### PoC
+  Environment: Python 3.10+ inside a venv; Authlib installed editable from this repository so source changes are visible. The PoC script demonstrates both a benign and a compressible-bomb payload and prints wall/CPU time, RSS, and size ratios.
+
+  1) Create venv and install Authlib (editable):
+  Set current directory to /authlib
+  Download [jwe_deflate_dos_demo.py](https://github.com/user-attachments/files/22519553/jwe_deflate_dos_demo.py) in /authlib
+  ```
+  python3 -m venv .venv
+  .venv/bin/pip install --upgrade pip
+  .venv/bin/pip install -e .
+  ```
+
+  2) Run the PoC (included in this repo):
+  ```
+  .venv/bin/python /authlib/jwe_deflate_dos_demo.py --size 50 --max-rss-mb 2048
+  ```
+
+  Sample output (abridged):
+  ```
+  LOCAL TEST ONLY – do not send to third-party systems.
+  Runtime: Python 3.13.6 / Authlib 1.6.4 / zip=DEF via A256GCM
+  [CASE] normal    plaintext=13B  ciphertext=117B decompressed=13B  wall_s=0.000 cpu_s=0.000 peak_rss_mb=31.0  ratio=0.1
+  [CASE] malicious plaintext=50MB ciphertext=~4KB decompressed=50MB wall_s=~2.3  cpu_s=~2.2  peak_rss_mb=800+  ratio=12500+
+  ```
+
+  The second case shows the decompression spike: a few KB of ciphertext forces allocation and processing of ~50 MB during decrypt. Repeated requests can quickly exhaust available memory and CPU.
+
+  Reproduction notes:
+  - Algorithm: `alg=dir`, `enc=A256GCM`, header includes `{ "zip": "DEF" }`.
+  - The PoC uses a 32‑byte local symmetric key and a highly compressible payload (`"A" * N`).
+  - Increase `--size` to stress memory; the `--max-rss-mb` flag helps avoid destabilizing the host during testing.
+
+  ### Impact
+  - Effect: Denial of service (memory/CPU exhaustion) during JWE decrypt of `zip=DEF` tokens.
+  - Who is impacted: Any service that uses Authlib to decrypt JWE tokens with `zip=DEF` and where an attacker can submit tokens that will be successfully decrypted (e.g., shared `dir` key, token reflection, or compromised/abused issuers).
+  - Confidentiality/Integrity: No direct C/I impact; availability impact is high.
+
+  ### Severity (CVSS v3.1)
+  Base vector (typical shared‑secret scenario where the attacker must produce a decryptable token):
+  - `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H` → 6.5 (MEDIUM)
+
+  **Rationale:**
+  - Network‑reachable (AV:N), low complexity (AC:L), no user interaction (UI:N), scope unchanged (S:U).
+  - Attacker must hold or gain ability to mint a decryptable token for the target (PR:L) — common with `alg=dir` and shared keys across services.
+  - No confidentiality or integrity loss (C:N/I:N); availability is severely impacted (A:H) due to decompression expansion.
+  If arbitrary unprivileged parties can submit JWEs that will be decrypted (PR:N), the base vector becomes:
+  - `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H` → 7.5 (HIGH)
+
+  ### Mitigations / Workarounds
+  - Reject or strip `zip=DEF` for inbound JWEs at the application boundary until a fix is available.
+  - Fork and add a bounded decompression guard (e.g., `zlib.decompress(..., max_length)` via `decompressobj().decompress(data, MAX_SIZE)`), returning an error when output exceeds a safe limit.
+  - Enforce strict maximum token sizes and fail fast on oversized inputs; combine with rate limiting.
+
+  ### Remediation Guidance (for maintainers)
+  - Mirror `joserfc`’s approach: add a conservative maximum output size (e.g., 256 KB by default) and raise a specific error when exceeded; document a controlled way to raise this ceiling for trusted environments.
+  - Consider streaming decode with chunked limits to avoid large single allocations.
+
+  ### References
+  - Authlib source: `authlib/authlib/jose/rfc7518/jwe_zips.py`, `authlib/authlib/jose/rfc7516/jwe.py`
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-g7f3-828f-7h7m
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/authlib/authlib
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authlib/authlib
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/authlib/authlib/commit/e0863d5129316b1790eee5f14cece32a03b8184d
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authlib/authlib/commit/e0863d5129316b1790eee5f14cece32a03b8184d
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/authlib/authlib/security/advisories/GHSA-g7f3-828f-7h7m
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authlib/authlib/security/advisories/GHSA-g7f3-828f-7h7m
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authlib/authlib/security/advisories/GHSA-g7f3-828f-7h7m
+weaknesses:
+  - CWE-770
+  - CWE-400
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://github.com/authlib/authlib
+    reference_type:
+    reference_id:
+  - url: https://github.com/authlib/authlib/commit/e0863d5129316b1790eee5f14cece32a03b8184d
+    reference_type:
+    reference_id:
+  - url: https://github.com/authlib/authlib/security/advisories/GHSA-g7f3-828f-7h7m
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-g7f3-828f-7h7m
+    reference_type:
+    reference_id: GHSA-g7f3-828f-7h7m

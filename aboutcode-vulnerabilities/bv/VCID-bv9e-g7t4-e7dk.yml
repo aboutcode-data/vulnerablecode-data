@@ -1,0 +1,188 @@
+vulnerability_id: VCID-bv9e-g7t4-e7dk
+aliases:
+  - CVE-2025-69202
+  - GHSA-x4m5-4cw8-vc44
+summary: |
+  axios-cache-interceptor Vulnerable to Cache Poisoning via Ignored HTTP Vary Header
+  ## Summary
+
+  When a server calls an upstream service using different auth tokens, axios-cache-interceptor returns incorrect cached responses, leading to authorization bypass.
+
+  ## Details
+
+  The cache key is generated only from the URL, ignoring request headers like `Authorization`. When the server responds with `Vary: Authorization` (indicating the response varies by auth token), the library ignores this, causing all requests to share the same cache regardless of authorization.
+
+  ## Impact
+
+  **Affected:** Server-side applications (APIs, proxies, backend services) that:
+
+  - Use axios-cache-interceptor to cache requests to upstream services
+  - Handle requests from multiple users with different auth tokens
+  - Upstream services replies on `Vary` to differentiate caches
+
+  **Not affected:** Browser/client-side applications (single user per browser session).
+
+  Services using different auth tokens to call upstream services will return incorrect cached data, bypassing authorization checks and leaking user data across different authenticated sessions.
+
+  ## Solution
+
+  After `v1.11.1`, automatic `Vary` header support is now enabled by default.
+
+  When server responds with `Vary: Authorization`, cache keys now include the authorization header value. Each user gets their own cache.
+
+  ```js
+  // v1.11.1+ (automatic, no config needed)
+  // User 123: key = hash(url + {authorization: 'Bearer 123'})
+  // User 456: key = hash(url + {authorization: 'Bearer 456'})
+  // ✓ Different caches, no poisoning
+  ```
+
+  ## Remediation
+
+  Upgrade to v1.11.1 or later. _No code changes required, protection is automatic_
+
+
+  ## Proof of Concept
+
+  ```js
+  const http = require('node:http');
+  const axios = require('axios');
+  const { setupCache } = require('axios-cache-interceptor');
+
+  // Server that returns different responses based on Authorization
+  const server = http.createServer((req, res) => {
+    const auth = req.headers.authorization;
+
+    res.setHeader('Vary', 'Authorization');
+
+    if (auth === 'Bearer 123') {
+      res.write('Hello, user 123!');
+    } else if (auth === 'Bearer 456') {
+      res.write('Hello, user 456!');
+    } else {
+      res.write('Unknown');
+    }
+
+    res.end();
+  });
+
+  server.listen(5000);
+
+  // Client making requests with different tokens
+  const cachedAxios = setupCache(axios.create());
+
+  const server2 = http.createServer(async (_req, res) => {
+    const authHeader =
+      Math.random() < 0.5 ? 'Bearer 123' : 'Bearer 456';
+
+    const response = await cachedAxios.get('http://localhost:5000', {
+      headers: { Authorization: authHeader }
+    });
+
+    console.log({
+      response: response.data,
+      cached: response.cached,
+      auth: authHeader
+    });
+    res.write(response.data);
+    res.end();
+  });
+
+  server2.listen(5001);
+
+  // Trigger 10 requests
+  Promise.all(
+    Array.from({ length: 10 }, () =>
+      axios.get('http://localhost:5001').catch(console.error)
+    )
+  ).finally(() => {
+    server.close();
+    server2.close();
+  });
+  ```
+
+  All 10 responses return "Hello, user 123!" even when using "Bearer 456" - users receive each other's cached data.
+severities:
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09829'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-69202
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09816'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-69202
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-x4m5-4cw8-vc44
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor
+  - score: 6
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:N/VC:H/VI:N/VA:N/SC:L/SI:L/SA:N
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/commit/49a808059dfc081b9cc23d48f243d55dfce15f01
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/commit/49a808059dfc081b9cc23d48f243d55dfce15f01
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-30T21:52:53Z/
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/commit/49a808059dfc081b9cc23d48f243d55dfce15f01
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/security/advisories/GHSA-x4m5-4cw8-vc44
+  - score: 6
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:N/VC:H/VI:N/VA:N/SC:L/SI:L/SA:N
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/security/advisories/GHSA-x4m5-4cw8-vc44
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/security/advisories/GHSA-x4m5-4cw8-vc44
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-30T21:52:53Z/
+    published_at: None
+    url: https://github.com/arthurfiorette/axios-cache-interceptor/security/advisories/GHSA-x4m5-4cw8-vc44
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-69202
+weaknesses:
+  - CWE-573
+  - CWE-524
+  - CWE-639
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-69202
+    reference_type:
+    reference_id:
+  - url: https://github.com/arthurfiorette/axios-cache-interceptor
+    reference_type:
+    reference_id:
+  - url: https://github.com/arthurfiorette/axios-cache-interceptor/commit/49a808059dfc081b9cc23d48f243d55dfce15f01
+    reference_type:
+    reference_id:
+  - url: https://github.com/arthurfiorette/axios-cache-interceptor/security/advisories/GHSA-x4m5-4cw8-vc44
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-69202
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-x4m5-4cw8-vc44
+    reference_type:
+    reference_id: GHSA-x4m5-4cw8-vc44

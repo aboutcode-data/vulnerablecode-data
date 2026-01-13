@@ -1,0 +1,163 @@
+vulnerability_id: VCID-q9ht-2xmm-zfb2
+aliases:
+  - CVE-2022-50471
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  xen/gntdev: Accommodate
+  VMA splitting  Prior to this commit, the gntdev driver code did not handle the following scenario
+  correctly with paravirtualized (PV) Xen domains:  * User process sets up a gntdev mapping
+  composed of two grant mappings   (i.e., two pages shared by another Xen domain). * User process
+  munmap()s one of the pages. * User process munmap()s the remaining page. * User process exits.  In
+  the scenario above, the user process would cause the kernel to log the following messages
+  in dmesg for the first munmap(), and the second munmap() call would result in similar log
+  messages:    BUG: Bad page map in process doublemap.test  pte:... pmd:...   page:0000000057c97bff
+  refcount:1 mapcount:-1 \     mapping:0000000000000000 index:0x0 pfn:...   ...   page dumped
+  because: bad pte   ...   file:gntdev fault:0x0 mmap:gntdev_mmap [xen_gntdev] readpage:0x0   ...   Call
+  Trace:    <TASK>    dump_stack_lvl+0x46/0x5e    print_bad_pte.cold+0x66/0xb6    unmap_page_range+0x7e5/0xdc0    unmap_vmas+0x78/0xf0    unmap_region+0xa8/0x110    __do_munmap+0x1ea/0x4e0    __vm_munmap+0x75/0x120    __x64_sys_munmap+0x28/0x40    do_syscall_64+0x38/0x90    entry_SYSCALL_64_after_hwframe+0x61/0xcb    ...  For
+  each munmap() call, the Xen hypervisor (if built with CONFIG_DEBUG) would print out the following
+  and trigger a general protection fault in the affected Xen PV domain:    (XEN) d0v... Attempt
+  to implicitly unmap d0''s grant PTE ...   (XEN) d0v... Attempt to implicitly unmap d0''s grant
+  PTE ...  As of this writing, gntdev_grant_map structure''s vma field (referred to as map->vma
+  below) is mainly used for checking the start and end addresses of mappings. However, with
+  split VMAs, these may change, and there could be more than one VMA associated with a gntdev
+  mapping. Hence, remove the use of map->vma and rely on map->pages_vm_start for the original
+  start address and on (map->count << PAGE_SHIFT) for the original mapping size. Let the invalidate()
+  and find_special_page() hooks use these.  Also, given that there can be multiple VMAs associated
+  with a gntdev mapping, move the "mmu_interval_notifier_remove(&map->notifier)" call to the
+  end of gntdev_put_map, so that the MMU notifier is only removed after the closing of the last
+  remaining VMA.  Finally, use an atomic to prevent inadvertent gntdev mapping re-use, instead
+  of using the map->live_grants atomic counter and/or the map->vma pointer (the latter of which
+  is now removed). This prevents the userspace from mmap()''ing (with MAP_FIXED) a gntdev mapping
+  over the same address range as a previously set up gntdev mapping. This scenario can be summarized
+  with the following call-trace, which was valid prior to this commit:    mmap     gntdev_mmap   mmap
+  (repeat mmap with MAP_FIXED over the same address range)     gntdev_invalidate       unmap_grant_pages
+  (sets ''being_removed'' entries to true)         gnttab_unmap_refs_async     unmap_single_vma     gntdev_mmap
+  (maps the shared pages again)   munmap     gntdev_invalidate       unmap_grant_pages         (no-op
+  because ''being_removed'' entries are true)     unmap_single_vma (For PV domains, Xen reports
+  that a granted page       is being unmapped and triggers a general protection fault in the       affected
+  domain, if Xen was built with CONFIG_DEBUG)  The fix for this last scenario could be worth
+  its own commit, but we opted for a single commit, because removing the gntdev_grant_map structure''s
+  vma field requires guarding the entry to gntdev_mmap(), and the live_grants atomic counter
+  is not sufficient on its own to prevent the mmap() over a pre-existing mapping.'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50471.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.0326'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03289'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05033'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05006'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04996'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04977'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04941'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04957'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04937'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04925'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04912'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04924'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04938'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05015'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05038'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05017'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05024'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06909'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06874'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-911
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50471.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-50471
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-50471
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2401570
+    reference_type:
+    reference_id: 2401570

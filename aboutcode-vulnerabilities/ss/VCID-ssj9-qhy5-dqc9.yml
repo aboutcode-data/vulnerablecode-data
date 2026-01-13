@@ -1,0 +1,86 @@
+vulnerability_id: VCID-ssj9-qhy5-dqc9
+aliases:
+  - GHSA-q6hv-wcjr-wp8h
+summary: |
+  kcp is missing update validation allows arbitrary LogicalCluster status patches through initializingworkspaces Virtual Workspace
+  ### Impact
+
+  Because UPDATE validation is not being applied, it is possible for an actor with access to an instance of the [initializingworkspaces virtual workspace](https://docs.kcp.io/kcp/latest/concepts/workspaces/workspace-initialization/) to run arbitrary patches on the status field of `LogicalCluster` objects while the workspace is initializing.
+
+  This allows to add or remove any initializers as well as changing the phase of a `LogicalCluster` (to "Ready" for example).
+
+  As this effectively allows to skip certain initializers or the entire initialization phase, potential integrations with external systems such as billing or security could be affected. Their initializers could be skipped by a `WorkspaceType` that adds another initializer and grants permissions to the virtual workspace to a rogue or compromised entity.
+
+  _Who is impacted?_
+
+  * Impacts other owners of `WorkspaceTypes` with initializers that are inherited by other `WorkspaceTypes`.
+  * Impacts developers using the `virtual/framework` package to create their own virtualworkspaces if they are using UpdateFuncs in their custom storageWrappers.
+
+  ### Details
+
+  The issue occurs because the [rest.ValidateObjectUpdateFunc](https://github.com/kcp-dev/kcp/blob/cli/v0.28.1/pkg/virtual/framework/forwardingregistry/store.go#L174) is not being called within the DefaultDynamicDelegatedStoreFuncs. As a result, the intended status overwrite protection from initializers never gets called, allowing arbitrary logicalcluster status patches.
+
+  ### Patches
+
+  The problem has been patched in #3599 and is available in kcp 0.28.3 and higher.
+
+  ### Workarounds
+
+  - Further limit access to the `initialize` verb on `WorkspaceType` objects (see [documentation](https://docs.kcp.io/kcp/v0.28/concepts/workspaces/workspace-initialization/#enforcing-permissions-for-initializers) for details).
+  - Only use trusted `WorkspaceType` objects.
+
+  ### References
+
+  See the pull request (#3599).
+severities:
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kcp-dev/kcp
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kcp-dev/kcp/commit/02134a2a51d33652ab288cccd7a13539b59c7584
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kcp-dev/kcp/pull/3599
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kcp-dev/kcp/releases/tag/v0.28.3
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kcp-dev/kcp/security/advisories/GHSA-q6hv-wcjr-wp8h
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-3985
+weaknesses:
+  - CWE-285
+references:
+  - url: https://github.com/kcp-dev/kcp
+    reference_type:
+    reference_id:
+  - url: https://github.com/kcp-dev/kcp/commit/02134a2a51d33652ab288cccd7a13539b59c7584
+    reference_type:
+    reference_id:
+  - url: https://github.com/kcp-dev/kcp/pull/3599
+    reference_type:
+    reference_id:
+  - url: https://github.com/kcp-dev/kcp/releases/tag/v0.28.3
+    reference_type:
+    reference_id:
+  - url: https://github.com/kcp-dev/kcp/security/advisories/GHSA-q6hv-wcjr-wp8h
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2025-3985
+    reference_type:
+    reference_id:

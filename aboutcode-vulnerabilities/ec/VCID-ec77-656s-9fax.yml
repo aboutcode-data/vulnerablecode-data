@@ -1,0 +1,291 @@
+vulnerability_id: VCID-ec77-656s-9fax
+aliases:
+  - CVE-2025-6242
+  - GHSA-3f6c-7fw2-ppm4
+summary: |
+  vLLM is vulnerable to Server-Side Request Forgery (SSRF) through `MediaConnector` class
+  ### Summary
+
+  A Server-Side Request Forgery (SSRF) vulnerability exists in the `MediaConnector` class within the vLLM project's multimodal feature set. The `load_from_url` and `load_from_url_async` methods fetch and process media from user-provided URLs without adequate restrictions on the target hosts. This allows an attacker to coerce the vLLM server into making arbitrary requests to internal network resources.
+
+  This vulnerability is particularly critical in containerized environments like `llm-d`, where a compromised vLLM pod could be used to scan the internal network, interact with other pods, and potentially cause denial of service or access sensitive data. For example, an attacker could make the vLLM pod send malicious requests to an internal `llm-d` management endpoint, leading to system instability by falsely reporting metrics like the KV cache state.
+
+  ### Vulnerability Details
+
+  The core of the vulnerability lies in the `MediaConnector.load_from_url` method and its asynchronous counterpart. These methods accept a URL string to fetch media content (images, audio, video).
+
+  https://github.com/vllm-project/vllm/blob/119f683949dfed10df769fe63b2676d7f1eb644e/vllm/multimodal/utils.py#L97-L113
+
+  The function directly processes URLs with `http`, `https`, and `file` schemes. An attacker can supply a URL pointing to an internal IP address or a `localhost` endpoint. The vLLM server will then initiate a connection to this internal resource.
+
+  * **HTTP/HTTPS Scheme:** An attacker can craft a request like `{"image_url": "http://127.0.0.1:8080/internal_api"}`. The vLLM server will send a GET request to this internal endpoint.
+  * **File Scheme:** The `_load_file_url` method attempts to restrict file access to a subdirectory defined by `--allowed-local-media-path`. While this is a good security measure for local file access, it does not prevent network-based SSRF attacks.
+
+  ### Impact in `llm-d` Environments
+
+  The risk is significantly amplified in orchestrated environments such as `llm-d`, where multiple pods communicate over an internal network.
+
+  1.  **Denial of Service (DoS):** An attacker could target internal management endpoints of other services within the `llm-d` cluster. For instance, if a monitoring or metrics service is exposed internally, an attacker could send malformed requests to it. A specific example is an attacker causing the vLLM pod to call an internal API that reports a false KV cache utilization, potentially triggering incorrect scaling decisions or even a system shutdown.
+
+  2.  **Internal Network Reconnaissance:** Attackers can use the vulnerability to scan the internal network for open ports and services by providing URLs like `http://10.0.0.X:PORT` and observing the server's response time or error messages.
+
+  3.  **Interaction with Internal Services:** Any unsecured internal service becomes a potential target. This could include databases, internal APIs, or other model pods that might not have robust authentication, as they are not expected to be directly exposed.
+
+  Delegating this security responsibility to an upper-level orchestrator like `llm-d` is problematic. **The orchestrator cannot easily distinguish between legitimate requests initiated by the vLLM engine for its own purposes and malicious requests originating from user input, thus complicating traffic filtering rules and increasing management overhead.**
+
+  ### Proposed Mitigation
+
+  To address this vulnerability, it is essential to restrict the URLs that the `MediaConnector` can access. The principle of least privilege should be applied.
+
+  It is recommend to implement a configurable **allowlist or denylist** for domains and IP addresses.
+
+  * **Allowlist:** The most secure approach is to allow connections only to a predefined list of trusted domains. This could be configured via a command-line argument, such as `--allowed-media-domains`. By default, this list could be empty, forcing administrators to explicitly enable external media fetching.
+
+  * **Denylist:** Alternatively, a denylist could block access to private IP address ranges (`127.0.0.1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) and other sensitive domains.
+
+  A check should be added at the beginning of the `load_from_url` methods to validate the parsed hostname against this list before any connection is made.
+
+  **Example Implementation Idea:**
+
+  ```python
+  # In MediaConnector.__init__
+  self.allowed_domains = set(config.get("allowed_media_domains", []))
+  self.denied_ip_ranges = [ip_network(r) for r in PRIVATE_IP_RANGES]
+
+  # In MediaConnector.load_from_url
+  url_spec = urlparse(url)
+  hostname = url_spec.hostname
+
+  if self.allowed_domains and hostname not in self.allowed_domains:
+      raise ValueError(f"Domain {hostname} is not in the allowed list.")
+
+  ip_address = ip_address(socket.gethostbyname(hostname))
+  if any(ip_address in network for network in self.denied_ip_ranges):
+      raise ValueError(f"Access to private IP address {ip_address} is forbidden.")
+  ```
+
+  By integrating this control directly into vLLM, empower administrators to enforce security policies at the source, creating a more secure deployment by default and reducing the burden on higher-level infrastructure management.
+severities:
+  - score: '7.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-6242.json
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/security/cve/CVE-2025-6242
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://access.redhat.com/security/cve/CVE-2025-6242
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-07T19:55:28Z/
+    published_at: None
+    url: https://access.redhat.com/security/cve/CVE-2025-6242
+  - score: '0.00039'
+    scoring_system: epss
+    scoring_elements: '0.11309'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13052'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13065'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.1306'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13067'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.1297'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13034'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13072'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13112'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13078'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13149'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13132'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13128'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.1318'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.1307'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13064'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.18539'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '0.00058'
+    scoring_system: epss
+    scoring_elements: '0.18559'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://bugzilla.redhat.com/show_bug.cgi?id=2373716
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://bugzilla.redhat.com/show_bug.cgi?id=2373716
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-07T19:55:28Z/
+    published_at: None
+    url: https://bugzilla.redhat.com/show_bug.cgi?id=2373716
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-3f6c-7fw2-ppm4
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://github.com/vllm-project/vllm
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vllm-project/vllm
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://github.com/vllm-project/vllm/commit/9d9a2b77f19f68262d5e469c4e82c0f6365ad72d
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vllm-project/vllm/commit/9d9a2b77f19f68262d5e469c4e82c0f6365ad72d
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://github.com/vllm-project/vllm/security/advisories/GHSA-3f6c-7fw2-ppm4
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vllm-project/vllm/security/advisories/GHSA-3f6c-7fw2-ppm4
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vllm-project/vllm/security/advisories/GHSA-3f6c-7fw2-ppm4
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:L/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-6242
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-6242
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-918
+  - CWE-601
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-6242.json
+    reference_type:
+    reference_id:
+  - url: https://access.redhat.com/security/cve/CVE-2025-6242
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-6242
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2373716
+    reference_type:
+    reference_id:
+  - url: https://github.com/vllm-project/vllm
+    reference_type:
+    reference_id:
+  - url: https://github.com/vllm-project/vllm/commit/9d9a2b77f19f68262d5e469c4e82c0f6365ad72d
+    reference_type:
+    reference_id:
+  - url: https://github.com/vllm-project/vllm/security/advisories/GHSA-3f6c-7fw2-ppm4
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-6242
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:/a:redhat:ai_inference_server:3
+    reference_type:
+    reference_id: cpe:/a:redhat:ai_inference_server:3
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:/a:redhat:enterprise_linux_ai:1
+    reference_type:
+    reference_id: cpe:/a:redhat:enterprise_linux_ai:1
+  - url: https://github.com/advisories/GHSA-3f6c-7fw2-ppm4
+    reference_type:
+    reference_id: GHSA-3f6c-7fw2-ppm4
+  - url: https://access.redhat.com/errata/RHSA-2025:23078
+    reference_type:
+    reference_id: RHSA-2025:23078
+  - url: https://access.redhat.com/errata/RHSA-2025:23079
+    reference_type:
+    reference_id: RHSA-2025:23079
+  - url: https://access.redhat.com/errata/RHSA-2025:23080
+    reference_type:
+    reference_id: RHSA-2025:23080

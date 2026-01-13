@@ -1,0 +1,88 @@
+vulnerability_id: VCID-cg2x-vj2y-m3cs
+aliases:
+  - GHSA-phhq-63jg-fp7r
+summary: |
+  Contrast vulnerability allows arbitrary host data Injection into container VOLUME mount points
+  ### Background
+
+  The [`VOLUME`](https://docs.docker.com/reference/dockerfile/#volume) directive in Dockerfiles, or the [`config.volumes`](https://github.com/opencontainers/image-spec/blob/06e6b47e2ef69021d9f9bf2cfa5fe43a7e010c81/config.md?plain=1#L168-L170) field in OCI image descriptors, indicates filesystem paths "where the process is likely to write data". While these paths have special semantics in Docker, they are only hints in the OCI spec and are not treated specially by Kubernetes. However, containered implements the [specified conversion logic](https://github.com/opencontainers/image-spec/blob/06e6b47e2ef69021d9f9bf2cfa5fe43a7e010c81/conversion.md?plain=1#L100-L105) and adds a mount point if there is none set by Kubernetes.
+
+  Unfortunately, the specification leaves it open whether the mount point is populated with any and what data, so the runtime needs to be able to push arbitrary data to the Kata agent. However, this is almost always not what the user wants:
+
+  1. A declared `VOLUME` location is usually important to the app's core functionality, which is usually at odds with the data in that location being untrusted.
+  2. `VOLUME` declarations are often used by image vendors to indicate "mount your persistence here" to the user. They are rarely useful without a real volume mounted there.
+
+  ### Impact
+
+  All of the following need to be true to be affected by this vulnerability:
+
+  1. A bare metal Contrast deployment (AKS is not affected).
+  2. An image with at least one VOLUME directive.
+  3. No Kubernetes mount at the path of the VOLUME.
+
+  If these are all true, the host is able to write arbitrary trees below that mount point.
+
+  ### Patches
+
+  Patched in v1.9.1 by disallowing this configuration in `contrast generate`.
+
+  ### Workarounds
+
+  Explicitly mount an `emptyDir` to all `VOLUME` locations. If the initial data in these locations is needed by the application, the image needs to be modified to remove the `config.volumes` entries.
+severities:
+  - score: '3.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/edgelesssys/contrast
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/edgelesssys/contrast
+  - score: '3.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/commit/635b471ddbb512b6661e6f1d767aab818bd50bda
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/commit/635b471ddbb512b6661e6f1d767aab818bd50bda
+  - score: '3.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/releases/tag/v1.9.1
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/releases/tag/v1.9.1
+  - score: '3.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/security/advisories/GHSA-phhq-63jg-fp7r
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/edgelesssys/contrast/security/advisories/GHSA-phhq-63jg-fp7r
+weaknesses:
+  - CWE-552
+  - CWE-693
+references:
+  - url: https://github.com/edgelesssys/contrast
+    reference_type:
+    reference_id:
+  - url: https://github.com/edgelesssys/contrast/commit/635b471ddbb512b6661e6f1d767aab818bd50bda
+    reference_type:
+    reference_id:
+  - url: https://github.com/edgelesssys/contrast/releases/tag/v1.9.1
+    reference_type:
+    reference_id:
+  - url: https://github.com/edgelesssys/contrast/security/advisories/GHSA-phhq-63jg-fp7r
+    reference_type:
+    reference_id:

@@ -1,0 +1,263 @@
+vulnerability_id: VCID-gx6q-asqt-ukg2
+aliases:
+  - CVE-2023-53178
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  mm: fix zswap
+  writeback race condition  The zswap writeback mechanism can cause a race condition resulting
+  in memory corruption, where a swapped out page gets swapped in with data that was written
+  to a different page.  The race unfolds like this: 1. a page with data A and swap offset X
+  is stored in zswap 2. page A is removed off the LRU by zpool driver for writeback in    zswap-shrink
+  work, data for A is mapped by zpool driver 3. user space program faults and invalidates page
+  entry A, offset X is    considered free 4. kswapd stores page B at offset X in zswap (zswap
+  could also be    full, if so, page B would then be IOed to X, then skip step 5.) 5. entry
+  A is replaced by B in tree->rbroot, this doesn''t affect the    local reference held by zswap-shrink
+  work 6. zswap-shrink work writes back A at X, and frees zswap entry A 7. swapin of slot X
+  brings A in memory instead of B  The fix: Once the swap page cache has been allocated (case
+  ZSWAP_SWAPCACHE_NEW), zswap-shrink work just checks that the local zswap_entry reference is
+  still the same as the one in the tree.  If it''s not the same it means that it''s either been
+  invalidated or replaced, in both cases the writeback is aborted because the local entry contains
+  stale data.  Reproducer: I originally found this by running `stress` overnight to validate
+  my work on the zswap writeback mechanism, it manifested after hours on my test machine.  The
+  key to make it happen is having zswap writebacks, so whatever setup pumps /sys/kernel/debug/zswap/written_back_pages
+  should do the trick.  In order to reproduce this faster on a vm, I setup a system with ~100M
+  of available memory and a 500M swap file, then running `stress --vm 1 --vm-bytes 300000000
+  --vm-stride 4000` makes it happen in matter of tens of minutes.  One can speed things up even
+  more by swinging /sys/module/zswap/parameters/max_pool_percent up and down between, say, 20
+  and 1; this makes it reproduce in tens of seconds.  It''s crucial to set `--vm-stride` to
+  something other than 4096 otherwise `stress` won''t realize that memory has been corrupted
+  because all pages would have the same data.'
+severities:
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53178.json
+  - score: '7.3'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53178.json
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.0279'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.02792'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02681'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02654'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02701'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04532'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04535'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04569'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0446'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04432'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04482'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04496'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04499'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04465'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04264'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04262'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04236'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04344'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04354'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04362'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05118'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05104'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05077'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05087'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05068'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05056'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05042'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05052'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05067'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05187'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05163'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0512'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses:
+  - CWE-367
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-53178.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-53178
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-53178
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2395358
+    reference_type:
+    reference_id: 2395358
+  - url: https://access.redhat.com/errata/RHSA-2024:9315
+    reference_type:
+    reference_id: RHSA-2024:9315
+  - url: https://access.redhat.com/errata/RHSA-2025:19886
+    reference_type:
+    reference_id: RHSA-2025:19886
+  - url: https://access.redhat.com/errata/RHSA-2025:19931
+    reference_type:
+    reference_id: RHSA-2025:19931
+  - url: https://access.redhat.com/errata/RHSA-2025:19932
+    reference_type:
+    reference_id: RHSA-2025:19932
+  - url: https://access.redhat.com/errata/RHSA-2025:21051
+    reference_type:
+    reference_id: RHSA-2025:21051
+  - url: https://access.redhat.com/errata/RHSA-2025:21083
+    reference_type:
+    reference_id: RHSA-2025:21083
+  - url: https://access.redhat.com/errata/RHSA-2025:21084
+    reference_type:
+    reference_id: RHSA-2025:21084
+  - url: https://access.redhat.com/errata/RHSA-2025:21091
+    reference_type:
+    reference_id: RHSA-2025:21091
+  - url: https://access.redhat.com/errata/RHSA-2025:21128
+    reference_type:
+    reference_id: RHSA-2025:21128
+  - url: https://access.redhat.com/errata/RHSA-2025:21136
+    reference_type:
+    reference_id: RHSA-2025:21136
+  - url: https://access.redhat.com/errata/RHSA-2025:22752
+    reference_type:
+    reference_id: RHSA-2025:22752
+  - url: https://access.redhat.com/errata/RHSA-2025:23445
+    reference_type:
+    reference_id: RHSA-2025:23445
+  - url: https://access.redhat.com/errata/RHSA-2025:23947
+    reference_type:
+    reference_id: RHSA-2025:23947
+  - url: https://access.redhat.com/errata/RHSA-2025:23960
+    reference_type:
+    reference_id: RHSA-2025:23960

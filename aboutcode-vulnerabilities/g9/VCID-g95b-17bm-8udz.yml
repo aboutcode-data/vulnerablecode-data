@@ -1,0 +1,451 @@
+vulnerability_id: VCID-g95b-17bm-8udz
+aliases:
+  - CVE-2025-52997
+  - GHSA-cm2r-rg7r-p7gg
+summary: "File Browser vulnerable to insecure password handling\n## Summary ##\n\nAll user accounts\
+  \ authenticate towards a *File Browser* instance with a password. A missing password policy\
+  \ and brute-force protection makes it impossible for administrators to properly secure the\
+  \ authentication process.\n\n## Impact ##\n\nAttackers can mount a brute-force attack against\
+  \ the passwords of all accounts of an instance. Since the application is lacking the ability\
+  \ to prevent users from choosing a weak password, the attack is likely to succeed.\n\n## Vulnerability\
+  \ Description ##\n\nThe application implement a classical authentication scheme using a username\
+  \ and password combination. While employed by many systems, this scheme is quite error-prone\
+  \ and a common cause for vulnerabilities. File Browser's implementation has multiple weak\
+  \ points:\n\n1. Since the application is missing the capability for administrators to define\
+  \ a password policy, users are at liberty to set trivial and well-known passwords such as\
+  \ `secret` or even ones with only single digit like `1`.\n2. New instances are set up with\
+  \ a default password of `admin` for the initial administrative account. This password is well\
+  \ known and easily guessable. While the documentation advises to change this password, the\
+  \ application does not technically enforce it.\n3. The application does not implement any\
+  \ brute-force protection for the authentication endpoint. Attackers can make as many guesses\
+  \ for a password as the network bandwidth allows.\n\nThe combination of these problems makes\
+  \ it likely, that an attacker will succeed in compromising at least one account in a *File\
+  \ Browser* instance, possibly even one with administrative privileges. The likelihood of such\
+  \ an attack increases substantially for internet-facing instances.\n\n## Proof of Concept\
+  \ ##\n\nThe insecure default credentials are documented on the application's website:\n\n\
+  ![image](https://github.com/user-attachments/assets/46c07d99-dc7b-4d6e-ac27-7eb002229201)\n\
+  \nThe following HTTP communication shows, that a trivial password of `1` can be configured\
+  \ by a user:\n\n```http hl:17\nPUT /api/users/2 HTTP/1.1\nHost: filebrowser.local:8080\nUser-Agent:\
+  \ Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0\nAccept: */*\nAccept-Language:\
+  \ en-US,en;q=0.5\nAccept-Encoding: gzip, deflate, br\nReferer: http://filebrowser.local:8080/settings/profile\n\
+  X-Auth: eyJ[...]\nContent-Type: text/plain;charset=UTF-8\nContent-Length: 319\nOrigin: http://filebrowser.local:8080\n\
+  Connection: keep-alive\nCookie: auth=eyJ[...]\nX-PwnFox-Color: cyan\nPriority: u=0\n\n{\"\
+  what\":\"user\",\"which\":[\"password\"],\"data\":{\"id\":2,\"locale\":\"en\",\"viewMode\"\
+  :\"mosaic\",\"singleClick\":false,\"perm\":{\"admin\":false,\"execute\":true,\"create\":true,\"\
+  rename\":true,\"modify\":true,\"delete\":true,\"share\":true,\"download\":true},\"commands\"\
+  :[],\"lockPassword\":false,\"hideDotfiles\":false,\"dateFormat\":false,\"password\":\"1\"\
+  }}\n\nHTTP/1.1 200 OK\nCache-Control: no-cache, no-store, must-revalidate\nContent-Security-Policy:\
+  \ default-src 'self'; style-src 'unsafe-inline';\nContent-Type: text/plain; charset=utf-8\n\
+  X-Content-Type-Options: nosniff\nDate: Thu, 27 Mar 2025 08:31:34 GMT\nContent-Length: 7\n\n\
+  200 OK\n```\n\nThe missing brute-force protection can easily be tested by repeatedly sending\
+  \ the following request to the application with a tool such as Burp or hydra.\n\n```\nPOST\
+  \ /api/login HTTP/1.1\nHost: filebrowser.local:8080\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64;\
+  \ rv:128.0) Gecko/20100101 Firefox/128.0\nAccept: */*\nAccept-Language: en-US,en;q=0.5\nAccept-Encoding:\
+  \ gzip, deflate, br\nContent-Type: application/json\nContent-Length: 52\nOrigin: http://filebrowser.local:8080\n\
+  \n{\"username\":\"admin\",\"password\":\"myPasswordGuess\",\"recaptcha\":\"\"}\n\nHTTP/1.1\
+  \ 403 Forbidden\nCache-Control: no-cache, no-store, must-revalidate\nContent-Security-Policy:\
+  \ default-src 'self'; style-src 'unsafe-inline';\nContent-Type: text/plain; charset=utf-8\n\
+  X-Content-Type-Options: nosniff\nDate: Thu, 27 Mar 2025 08:39:48 GMT\nContent-Length: 14\n\
+  \n403 Forbidden\n```\n\nAfter sending 3000 bad passwords to the application within a few seconds,\
+  \ a successful authentication is still possible for the account:\n\n```http\nPOST /api/login\
+  \ HTTP/1.1\nHost: filebrowser.local:8080\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:128.0)\
+  \ Gecko/20100101 Firefox/128.0\nAccept: */*\nAccept-Language: en-US,en;q=0.5\nAccept-Encoding:\
+  \ gzip, deflate, br\nContent-Type: application/json\nContent-Length: 54\nOrigin: http://filebrowser.local:8080\n\
+  Connection: keep-alive\n\n{\"username\":\"admin\",\"password\":\"myCorrectPassword\",\"recaptcha\"\
+  :\"\"}\n\nHTTP/1.1 200 OK\nCache-Control: no-cache, no-store, must-revalidate\nContent-Security-Policy:\
+  \ default-src 'self'; style-src 'unsafe-inline';\nContent-Type: text/plain\nDate: Thu, 27\
+  \ Mar 2025 08:39:58 GMT\nContent-Length: 508\n\neyJ[...]\n```\n\n## Recommended Countermeasures\
+  \ ##\n\nThe application should add an option to define a password policy in its administrative\
+  \ interface which allows to set a minimum length for passwords.\nThe default settings should\
+  \ be in line with the NIST publication SP 800-63B. This means, that now passwords of fewer\
+  \ than 8 characters should ever be allowed by the application.\nWhenever a user sets a new\
+  \ password, the application should verify whether that password is part of a \"known passwords\"\
+  \ list.\n\nThe application should either create a secure and random password for the `admin`\
+  \ account upon initialization or enforce an immediate password change when that user logs\
+  \ in for the first time using the default password.\n\nA brute-force protection needs to be\
+  \ implemented, which limits the allowed amount of authentication attempts per user within\
+  \ a certain timeframe. This implementation should employ *device tokens* to prevent targeted\
+  \ lockout attacks.\n\nIn addition, it would be advisable to allow the integration of the application\
+  \ into and existing *Identity Provider* using protocols like LDAP or OIDC.\n\n## Timeline\
+  \ ##\n\n* `2025-03-27` Identified the vulnerability in version 2.32.0\n* `2025-04-11` Contacted\
+  \ the project\n* `2025-04-29` Vulnerability disclosed to the project\n* `2025-06-25` Uploaded\
+  \ advisories to the project's GitHub repository\n* `2025-06-26` CVE ID assigned by GitHub\n\
+  * `2025-06-29` Fix released in version 2.34.1. 12 minimum characters as default has been chosen\
+  \ since the implementation does not include protection against brute force attacks. \n\n##\
+  \ References ##\n\n* [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#implement-proper-password-strength-controls)\n\
+  * [NIST Special Publication 800-63B. Digital Identity Guidelines. Passwords](https://pages.nist.gov/800-63-4/sp800-63b.html#password)\n\
+  * [Pwned Passwords](https://haveibeenpwned.com/Passwords)\n* [Common Credentials](https://github.com/danielmiessler/SecLists/tree/master/Passwords/Common-Credentials)\n\
+  * [CWE-307: Improper Restriction of Excessive Authentication Attempts](https://cwe.mitre.org/data/definitions/307.html)\n\
+  * [CWE-521: Weak Password Requirements](https://cwe.mitre.org/data/definitions/521.html)\n\
+  * [CWE-1392: Use of Default Credentials](https://cwe.mitre.org/data/definitions/1392.html)\n\
+  \n## Credits ##\n\n* Mathias Tausig ([SBA Research](https://www.sba-research.org/))"
+severities:
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10376'
+    published_at: '2025-07-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12344'
+    published_at: '2025-07-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12327'
+    published_at: '2025-07-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12488'
+    published_at: '2025-07-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12414'
+    published_at: '2025-07-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12453'
+    published_at: '2025-07-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12412'
+    published_at: '2025-07-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1242'
+    published_at: '2025-07-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.13622'
+    published_at: '2025-07-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.13652'
+    published_at: '2025-07-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00087'
+    scoring_system: epss
+    scoring_elements: '0.25463'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00087'
+    scoring_system: epss
+    scoring_elements: '0.25525'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33079'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33121'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33098'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33115'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33106'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33144'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00129'
+    scoring_system: epss
+    scoring_elements: '0.33054'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34235'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34299'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34319'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34294'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34267'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34369'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34359'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34373'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34207'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.3418'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34182'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34163'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34224'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34232'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34199'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34157'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34141'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.3423'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34225'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34236'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34152'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34149'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34187'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34184'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34167'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34226'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34284'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34307'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34228'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00136'
+    scoring_system: epss
+    scoring_elements: '0.34317'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00159'
+    scoring_system: epss
+    scoring_elements: '0.37473'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00159'
+    scoring_system: epss
+    scoring_elements: '0.37373'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '0.00159'
+    scoring_system: epss
+    scoring_elements: '0.37445'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/commit/bf37f88c32222ad9c186482bb97338a9c9b4a93c
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/commit/bf37f88c32222ad9c186482bb97338a9c9b4a93c
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-06-30T20:26:44Z/
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/commit/bf37f88c32222ad9c186482bb97338a9c9b4a93c
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/security/advisories/GHSA-cm2r-rg7r-p7gg
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/security/advisories/GHSA-cm2r-rg7r-p7gg
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-06-30T20:26:44Z/
+    published_at: None
+    url: https://github.com/filebrowser/filebrowser/security/advisories/GHSA-cm2r-rg7r-p7gg
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/sbaresearch/advisories/tree/public/2025/SBA-ADV-20250327-01_Filebrowser_Insecure_Password_Handling
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/sbaresearch/advisories/tree/public/2025/SBA-ADV-20250327-01_Filebrowser_Insecure_Password_Handling
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-06-30T20:26:44Z/
+    published_at: None
+    url: https://github.com/sbaresearch/advisories/tree/public/2025/SBA-ADV-20250327-01_Filebrowser_Insecure_Password_Handling
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-52997
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-52997
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-52997
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-3792
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-3792
+weaknesses:
+  - CWE-1392
+  - CWE-521
+  - CWE-307
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-52997
+    reference_type:
+    reference_id:
+  - url: https://github.com/filebrowser/filebrowser
+    reference_type:
+    reference_id:
+  - url: https://github.com/filebrowser/filebrowser/commit/bf37f88c32222ad9c186482bb97338a9c9b4a93c
+    reference_type:
+    reference_id:
+  - url: https://github.com/filebrowser/filebrowser/security/advisories/GHSA-cm2r-rg7r-p7gg
+    reference_type:
+    reference_id:
+  - url: https://github.com/sbaresearch/advisories/tree/public/2025/SBA-ADV-20250327-01_Filebrowser_Insecure_Password_Handling
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-52997
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2025-3792
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:filebrowser:filebrowser:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:filebrowser:filebrowser:*:*:*:*:*:*:*:*

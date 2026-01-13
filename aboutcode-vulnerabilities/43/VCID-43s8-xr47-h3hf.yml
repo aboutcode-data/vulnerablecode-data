@@ -1,0 +1,59 @@
+vulnerability_id: VCID-43s8-xr47-h3hf
+aliases:
+  - CVE-2023-54023
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  btrfs: fix race
+  between balance and cancel/pause  Syzbot reported a panic that looks like this:    assertion
+  failed: fs_info->exclusive_operation == BTRFS_EXCLOP_BALANCE_PAUSED, in fs/btrfs/ioctl.c:465   ------------[
+  cut here ]------------   kernel BUG at fs/btrfs/messages.c:259!   RIP: 0010:btrfs_assertfail+0x2c/0x30
+  fs/btrfs/messages.c:259   Call Trace:    <TASK>    btrfs_exclop_balance fs/btrfs/ioctl.c:465
+  [inline]    btrfs_ioctl_balance fs/btrfs/ioctl.c:3564 [inline]    btrfs_ioctl+0x531e/0x5b30
+  fs/btrfs/ioctl.c:4632    vfs_ioctl fs/ioctl.c:51 [inline]    __do_sys_ioctl fs/ioctl.c:870
+  [inline]    __se_sys_ioctl fs/ioctl.c:856 [inline]    __x64_sys_ioctl+0x197/0x210 fs/ioctl.c:856    do_syscall_x64
+  arch/x86/entry/common.c:50 [inline]    do_syscall_64+0x39/0xb0 arch/x86/entry/common.c:80    entry_SYSCALL_64_after_hwframe+0x63/0xcd  The
+  reproducer is running a balance and a cancel or pause in parallel. The way balance finishes
+  is a bit wonky, if we were paused we need to save the balance_ctl in the fs_info, but clear
+  it otherwise and cleanup. However we rely on the return values being specific errors, or having
+  a cancel request or no pause request.  If balance completes and returns 0, but we have a pause
+  or cancel request we won''t do the appropriate cleanup, and then the next time we try to start
+  a balance we''ll trip this ASSERT.  The error handling is just wrong here, we always want
+  to clean up, unless we got -ECANCELLED and we set the appropriate pause flag in the exclusive
+  op.  With this patch the reproducer ran for an hour without tripping, previously it would
+  trip in less than a few minutes.'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54023.json
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.0513'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54023
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.05111'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54023
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54023.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-54023
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-54023
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2424976
+    reference_type:
+    reference_id: 2424976

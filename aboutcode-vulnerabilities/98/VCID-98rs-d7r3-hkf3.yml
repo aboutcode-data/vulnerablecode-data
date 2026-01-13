@@ -1,0 +1,59 @@
+vulnerability_id: VCID-98rs-d7r3-hkf3
+aliases:
+  - CVE-2022-50730
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  ext4: silence
+  the warning when evicting inode with dioread_nolock  When evicting an inode with default dioread_nolock,
+  it could be raced by the unwritten extents converting kworker after writeback some new allocated
+  dirty blocks. It convert unwritten extents to written, the extents could be merged to upper
+  level and free extent blocks, so it could mark the inode dirty again even this inode has been
+  marked I_FREEING. But the inode->i_io_list check and warning in ext4_evict_inode() missing
+  this corner case. Fortunately, ext4_evict_inode() will wait all extents converting finished
+  before this check, so it will not lead to inode use-after-free problem, every thing is OK
+  besides this warning. The WARN_ON_ONCE was originally designed for finding inode use-after-free
+  issues in advance, but if we add current dioread_nolock case in, it will become not quite
+  useful, so fix this warning by just remove this check.   ======  WARNING: CPU: 7 PID: 1092
+  at fs/ext4/inode.c:227  ext4_evict_inode+0x875/0xc60  ...  RIP: 0010:ext4_evict_inode+0x875/0xc60  ...  Call
+  Trace:   <TASK>   evict+0x11c/0x2b0   iput+0x236/0x3a0   do_unlinkat+0x1b4/0x490   __x64_sys_unlinkat+0x4c/0xb0   do_syscall_64+0x3b/0x90   entry_SYSCALL_64_after_hwframe+0x46/0xb0  RIP:
+  0033:0x7fa933c1115b  ======  rm                          kworker                             ext4_end_io_end()
+  vfs_unlink()  ext4_unlink()                              ext4_convert_unwritten_io_end_vec()                               ext4_convert_unwritten_extents()                                ext4_map_blocks()                                 ext4_ext_map_blocks()                                  ext4_ext_try_to_merge_up()                                   __mark_inode_dirty()                                    check
+  !I_FREEING                                    locked_inode_to_wb_and_lock_list()  iput()   iput_final()    evict()     ext4_evict_inode()      truncate_inode_pages_final()
+  //wait release io_end                                     inode_io_list_move_locked()                              ext4_release_io_end()      trigger
+  WARN_ON_ONCE()'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50730.json
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05723'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50730
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05699'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50730
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50730.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-50730
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-50730
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2425043
+    reference_type:
+    reference_id: 2425043

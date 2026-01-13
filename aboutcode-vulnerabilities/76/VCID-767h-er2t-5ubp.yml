@@ -1,0 +1,135 @@
+vulnerability_id: VCID-767h-er2t-5ubp
+aliases:
+  - CVE-2025-66645
+  - GHSA-hxp3-63hc-5366
+summary: "NiceGUI has a path traversal in app.add_media_files() allows arbitrary file read\n\
+  ### Summary\n\nA directory traversal vulnerability in NiceGUI's `App.add_media_files()` allows\
+  \ a remote attacker to read arbitrary files on the server filesystem.\n\n### Details\n\nHello,\
+  \ I am Seungbin Yang, a university student studying cybersecurity. \nWhile reviewing the source\
+  \ code of the repository, I discovered a potential vulnerability and successfully verified\
+  \ it with a PoC.\n\nThe `App.add_media_files(url_path, local_directory)` method allows users\
+  \ to serve media files. However, the implementation lacks proper path validation.\n\n```python\n\
+  def add_media_files(self, url_path: str, local_directory: Union[str, Path]) -> None:\n   \
+  \ @self.get(url_path.rstrip('/') + '/{filename:path}')\n    def read_item(request: Request,\
+  \ filename: str, nicegui_chunk_size: int = 8192) -> Response:\n        filepath = Path(local_directory)\
+  \ / filename\n        if not filepath.is_file():\n            raise HTTPException(status_code=404,\
+  \ detail='Not Found')\n        return get_range_response(filepath, request, chunk_size=nicegui_chunk_size)\n\
+  ```\nRoot Cause:\n1. The `{filename:path}` parameter accepts full paths, including traversal\
+  \ sequences like `../`.\n2. The code simply joins local_directory and filename without checking\
+  \ if the result is still inside the local_directory.\n3. There is no path sanitization or\
+  \ boundary check.\n\nConsequence:\nAn attacker can use `..` to access files outside the intended\
+  \ directory. If the application has permission, sensitive files (e.g., /etc/hosts, source\
+  \ code, config files) can be exposed.\n\n### POC\n1. Create `poc.py`:\n```python\n# poc.py\n\
+  from pathlib import Path\nfrom nicegui import app, ui\n\nMEDIA_DIR = Path(__file__).parent\
+  \ / 'media'\nMEDIA_DIR.mkdir(exist_ok=True)\n\n# Expose local \"media\" directory at /media\n\
+  app.add_media_files('/media', MEDIA_DIR)\n\n@ui.page('/')\ndef index():\n    ui.label('NiceGUI\
+  \ media PoC')\n\nui.run(port=8080, reload=False)\n```\n\n2. Run the application: `python3\
+  \ poc.py`\n\n3. Exploit with curl: Use URL-encoded dots (`%2e`) to bypass client-side checks.\n\
+  ```curl -v \"http://localhost:8080/media/%2e%2e/%2e%2e/%2e%2e/etc/hosts\"```\n\n\n### Result:\n\
+  The HTTP status is 200 OK, and the response body contains the contents of the server’s /etc/hosts\
+  \ file.\n\nI have attached a screenshot of the successful exploitation below. As shown in\
+  \ the image, the content of /etc/hosts displayed via cat matches the output received from\
+  \ the curl request perfectly.\n\n<img width=\"1728\" height=\"1078\" alt=\"POC screenshot\"\
+  \ src=\"https://github.com/user-attachments/assets/6c1be75b-6be2-4372-90df-55042c1e4775\"\
+  \ />\n\n### Impact\n\nAny NiceGUI application that calls app.add_media_files() on a URL path\
+  \ reachable by an attacker is affected. An unauthenticated remote attacker can read sensitive\
+  \ files outside the intended media directory, potentially exposing:\n\n•Application source\
+  \ code and configuration files\n•Credentials, API keys, and secrets\n•Operating system configuration\
+  \ files (e.g., /etc/passwd, /etc/hosts)\n\nThis is my first github vulnerability report, so\
+  \ I would appreciate your understanding regarding any potential shortcomings. If you require\
+  \ any further information or clarification, please feel free to contact me at y4rvin@naver.com.\n\
+  \nThank you."
+severities:
+  - score: '0.00933'
+    scoring_system: epss
+    scoring_elements: '0.75642'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-66645
+  - score: '0.01016'
+    scoring_system: epss
+    scoring_elements: '0.7668'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-66645
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-hxp3-63hc-5366
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/commit/a1b89e2a24e1911a40389ace2153a37f4eea92a9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/commit/a1b89e2a24e1911a40389ace2153a37f4eea92a9
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-12-10T16:14:20Z/
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/commit/a1b89e2a24e1911a40389ace2153a37f4eea92a9
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/security/advisories/GHSA-hxp3-63hc-5366
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/security/advisories/GHSA-hxp3-63hc-5366
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/security/advisories/GHSA-hxp3-63hc-5366
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:P/P:M/B:A/M:M/D:T/2025-12-10T16:14:20Z/
+    published_at: None
+    url: https://github.com/zauberzeug/nicegui/security/advisories/GHSA-hxp3-63hc-5366
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-66645
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-66645
+weaknesses:
+  - CWE-22
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-66645
+    reference_type:
+    reference_id:
+  - url: https://github.com/zauberzeug/nicegui
+    reference_type:
+    reference_id:
+  - url: https://github.com/zauberzeug/nicegui/commit/a1b89e2a24e1911a40389ace2153a37f4eea92a9
+    reference_type:
+    reference_id:
+  - url: https://github.com/zauberzeug/nicegui/security/advisories/GHSA-hxp3-63hc-5366
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-66645
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-hxp3-63hc-5366
+    reference_type:
+    reference_id: GHSA-hxp3-63hc-5366

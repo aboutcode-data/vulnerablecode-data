@@ -1,0 +1,158 @@
+vulnerability_id: VCID-424k-zh5r-aqab
+aliases:
+  - CVE-2025-65019
+  - GHSA-fvmw-cj7j-j39q
+summary: |
+  Astro Cloudflare adapter has Stored Cross-site Scripting vulnerability in /_image endpoint
+  **Summary**
+  A Cross-Site Scripting (XSS) vulnerability exists in Astro when using the **@astrojs/cloudflare** adapter with `output: 'server'`. The built-in image optimization endpoint (`/_image`) uses `isRemoteAllowed()` from Astro’s internal helpers, which **unconditionally allows `data:` URLs**. When the endpoint receives a valid `data:` URL pointing to a malicious SVG containing JavaScript, and the Cloudflare-specific implementation performs a **302 redirect back to the original `data:` URL**, the browser directly executes the embedded JavaScript. This completely bypasses any domain allow-listing (`image.domains` / `image.remotePatterns`) and typical Content Security Policy mitigations.
+
+  **Affected Versions**
+  - `@astrojs/cloudflare` ≤ 12.6.10 (and likely all previous versions)
+  - Astro ≥ 4.x when used with `output: 'server'` and the Cloudflare adapter
+
+  **Root Cause – Vulnerable Code**
+  File: `node_modules/@astrojs/internal-helpers/src/remote.ts`
+
+  ```ts
+  export function isRemoteAllowed(src: string, ...): boolean {
+  if (!URL.canParse(src)) {
+  return false;
+  }
+  const url = new URL(src);
+
+  // Data URLs are always allowed
+  if (url.protocol === 'data:') {
+  return true;
+  }
+
+  // Non-http(s) protocols are never allowed
+  if (!['http:', 'https:'].includes(url.protocol)) {
+  return false;
+  }
+  // ... further http/https allow-list checks
+  }
+  ```
+
+  In the **Cloudflare adapter**, the `/_image` endpoint contains logic similar to:
+
+  ```ts
+  const href = ctx.url.searchParams.get('href');
+  if (!href) {
+  // return error
+  }
+
+  if (isRemotePath(href)) {
+  if (isRemoteAllowed(href, imageConfig) === false) {
+  // return error
+  } else {
+  //redirect to return the image
+  return Response.redirect(href, 302);
+  }
+  }
+  ```
+
+  Because `data:` URLs are considered “allowed”, a request such as:
+  `https://example.com/_image?href=data:image/svg+xml;base64,PHN2Zy... (base64-encoded malicious SVG)`
+
+  triggers a **302 redirect directly to the `data:` URL**, causing the browser to render and execute the malicious JavaScript inside the SVG.
+
+  **Proof of Concept (PoC)**
+
+  1. Create a minimal Astro project with Cloudflare adapter (`output: 'server'`).
+  2. Deploy to Cloudflare Pages or Workers.
+  3. Request the image endpoint with the following payload:
+severities:
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13482'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65019
+  - score: '0.00044'
+    scoring_system: epss
+    scoring_elements: '0.13437'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65019
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-fvmw-cj7j-j39q
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/withastro/astro
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/withastro/astro
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/withastro/astro/commit/9e9c528191b6f5e06db9daf6ad26b8f68016e533
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/withastro/astro/commit/9e9c528191b6f5e06db9daf6ad26b8f68016e533
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-11-19T21:05:09Z/
+    published_at: None
+    url: https://github.com/withastro/astro/commit/9e9c528191b6f5e06db9daf6ad26b8f68016e533
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://github.com/withastro/astro/security/advisories/GHSA-fvmw-cj7j-j39q
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/withastro/astro/security/advisories/GHSA-fvmw-cj7j-j39q
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/withastro/astro/security/advisories/GHSA-fvmw-cj7j-j39q
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-11-19T21:05:09Z/
+    published_at: None
+    url: https://github.com/withastro/astro/security/advisories/GHSA-fvmw-cj7j-j39q
+  - score: '5.4'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-65019
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-65019
+weaknesses:
+  - CWE-79
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-65019
+    reference_type:
+    reference_id:
+  - url: https://github.com/withastro/astro
+    reference_type:
+    reference_id:
+  - url: https://github.com/withastro/astro/commit/9e9c528191b6f5e06db9daf6ad26b8f68016e533
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-65019
+    reference_type:
+    reference_id: CVE-2025-65019
+  - url: https://github.com/advisories/GHSA-fvmw-cj7j-j39q
+    reference_type:
+    reference_id: GHSA-fvmw-cj7j-j39q
+  - url: https://github.com/withastro/astro/security/advisories/GHSA-fvmw-cj7j-j39q
+    reference_type:
+    reference_id: GHSA-fvmw-cj7j-j39q

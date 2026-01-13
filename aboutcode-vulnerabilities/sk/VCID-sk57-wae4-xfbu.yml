@@ -1,0 +1,126 @@
+vulnerability_id: VCID-sk57-wae4-xfbu
+aliases:
+  - CVE-2025-68478
+  - GHSA-f43r-cc68-gpx4
+summary: "External Control of File Name or Path in Langflow\n**Vulnerability Overview**\n\n\
+  If an arbitrary path is specified in the request body's `fs_path`, the server serializes the\
+  \ Flow object into JSON and creates/overwrites a file at that path. There is no path restriction,\
+  \ normalization, or allowed directory enforcement, so absolute paths (e.g., /etc/poc.txt)\
+  \ are interpreted as is.\n\n**Vulnerable Code**\n\n1. It receives the request body (flow),\
+  \ updates the DB, and then passes it to the file-writing sink.\n    \n    https://github.com/langflow-ai/langflow/blob/ac6e2d2eabeee28085f2739d79f7ce4205ca082c/src/backend/base/langflow/api/v1/flows.py#L154-L168\n\
+  \    \n    ```python\n    @router.post(\"/\", response_model=FlowRead, status_code=201)\n\
+  \    async def create_flow(\n        *,\n        session: DbSession,\n        flow: FlowCreate,\n\
+  \        current_user: CurrentActiveUser,\n    ):\n        try:\n            db_flow = await\
+  \ _new_flow(session=session, flow=flow, user_id=current_user.id)\n            await session.commit()\n\
+  \            await session.refresh(db_flow)\n    \n            await _save_flow_to_fs(db_flow)\n\
+  \    \n        except Exception as e:\n    ```\n    \n2. Applies authentication dependency\
+  \ (requires API Key/JWT) when accessing the endpoint.\n    \n    https://github.com/langflow-ai/langflow/blob/ac6e2d2eabeee28085f2739d79f7ce4205ca082c/src/backend/base/langflow/api/utils/core.py#L36-L38\n\
+  \    \n    ```python\n    CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]\n\
+  \    CurrentActiveMCPUser = Annotated[User, Depends(get_current_active_user_mcp)]\n    DbSession\
+  \ = Annotated[AsyncSession, Depends(get_session)]\n    ```\n    \n3. The client can directly\
+  \ specify the save path, including `fs_path`.\n    \n    https://github.com/langflow-ai/langflow/blob/ac6e2d2eabeee28085f2739d79f7ce4205ca082c/src/backend/base/langflow/api/v1/flows.py#L66-L70\n\
+  \    \n    ```python\n    ):\n        try:\n            await _verify_fs_path(flow.fs_path)\n\
+  \    \n            \"\"\"Create a new flow.\"\"\"\n    ```\n    \n4. It attempts to create\
+  \ the file (or *the* file, in the case of a path without a parent) directly without path validation.\n\
+  \    \n    https://github.com/langflow-ai/langflow/blob/ac6e2d2eabeee28085f2739d79f7ce4205ca082c/src/backend/base/langflow/api/v1/flows.py#L45-L49\n\
+  \    \n    ```python\n    async def _verify_fs_path(path: str | None) -> None:\n        if\
+  \ path:\n            path_ = Path(path)\n            if not await path_.exists():\n      \
+  \          await path_.touch()\n    ```\n    \n5. Serializes the Flow object to JSON and writes\
+  \ it to the specified path in \"w\" mode (overwriting).\n    \n    https://github.com/langflow-ai/langflow/blob/ac6e2d2eabeee28085f2739d79f7ce4205ca082c/src/backend/base/langflow/api/v1/flows.py#L52-L58\n\
+  \    \n    ```python\n    async def _save_flow_to_fs(flow: Flow) -> None:\n        if flow.fs_path:\n\
+  \            async with async_open(flow.fs_path, \"w\") as f:\n                try:\n    \
+  \                await f.write(flow.model_dump_json())\n                except OSError:\n\
+  \                    await logger.aexception(\"Failed to write flow %s to path %s\", flow.name,\
+  \ flow.fs_path)\n    ```\n    \n\n**PoC Description**\n\nWhen an authenticated user passes\
+  \ an arbitrary path in `fs_path`, the Flow JSON is written to that path. Since `/tmp` is usually\
+  \ writable, it is easy to reproduce. In a production environment, writing to system-protected\
+  \ directories may fail depending on permissions.\n\n**PoC**\n\n- **Before Exploit**\n   \n\
+  \n    <img width=\"1918\" height=\"658\" alt=\"image\" src=\"https://github.com/user-attachments/assets/fe3c2306-091d-4cb0-b4dc-c7fb63c03d8d\"\
+  \ />\n    \n- **After Exploit**\n    \n    ```bash\n    curl -sS -X POST \"http://localhost:7860/api/v1/flows/\"\
+  \ \\\n      -H \"Content-Type: application/json\" \\\n      -H \"x-api-key: sk-8Kyzf9IQ-UEJ_OtSTaJq4eniMT9_JKgZ7__q8PNkoxc\"\
+  \ \\\n      -d '{\"name\":\"poc-etc\",\"data\":{\"nodes\":[],\"edges\":[]},\"fs_path\":\"\
+  /tmp/POC.txt\"}'\n    ```\n    \n    <img width=\"1918\" height=\"742\" alt=\"image\" src=\"\
+  https://github.com/user-attachments/assets/cc0b0c96-1c2d-4d56-b558-5ba97e0ec174\" />\n   \
+  \ \n\n### Impact\n\n- **Authenticated Arbitrary File Write (within server permission scope):**\
+  \ Risk of corrupting configuration/log/task files, disrupting application behavior, and tampering\
+  \ with files read by other components.\n- **Both absolute and relative paths are allowed,\
+  \ enabling base directory traversal.** The risk of overwriting system files increases in environments\
+  \ with root privileges or weak mount/permission settings.\n- **The file content is limited\
+  \ to Flow JSON,** but the impact is severe if the target file is parsed by a JSON parser or\
+  \ is subject to subsequent processing.\n- **In production environments, it is essential to\
+  \ enforce a save root, normalize paths, block symlink traversal, and minimize permissions.**"
+severities:
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.14083'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68478
+  - score: '0.00046'
+    scoring_system: epss
+    scoring_elements: '0.14022'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68478
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-f43r-cc68-gpx4
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:L
+    published_at: None
+    url: https://github.com/langflow-ai/langflow
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langflow-ai/langflow
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:L
+    published_at: None
+    url: https://github.com/langflow-ai/langflow/security/advisories/GHSA-f43r-cc68-gpx4
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langflow-ai/langflow/security/advisories/GHSA-f43r-cc68-gpx4
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langflow-ai/langflow/security/advisories/GHSA-f43r-cc68-gpx4
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-19T17:23:19Z/
+    published_at: None
+    url: https://github.com/langflow-ai/langflow/security/advisories/GHSA-f43r-cc68-gpx4
+  - score: '7.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68478
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68478
+weaknesses:
+  - CWE-73
+  - CWE-610
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68478
+    reference_type:
+    reference_id:
+  - url: https://github.com/langflow-ai/langflow
+    reference_type:
+    reference_id:
+  - url: https://github.com/langflow-ai/langflow/security/advisories/GHSA-f43r-cc68-gpx4
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68478
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-f43r-cc68-gpx4
+    reference_type:
+    reference_id: GHSA-f43r-cc68-gpx4

@@ -1,0 +1,390 @@
+vulnerability_id: VCID-e2h5-wqus-m3bd
+aliases:
+  - CVE-2025-53818
+  - GHSA-6jx8-rcjx-vmwf
+summary: |
+  GitHub Kanban MCP Server vulnerable to Command Injection
+  The MCP Server at https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/ is written in a way that is vulnerable to command injection vulnerability attacks as part of some of its MCP Server tool definition and implementation.
+
+  ## Vulnerable tool
+
+  The MCP Server exposes the tool `add_comment` which relies on Node.js child process API `exec` to execute the GitHub (`gh`) command, is an unsafe and vulnerable API if concatenated with untrusted user input.
+
+  Data flows from the tool definition [here](https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/tool-handlers.ts#L79) which takes in `args.issue_number` and calls `handleAddComment()` in [this definitino](https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8) that uses `exec` in an insecure way.
+
+  Vulnerable line of code: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8-L23
+
+  ```js
+  export async function handleAddComment(args: {
+    repo: string;
+    issue_number: string;
+    body: string;
+    state?: 'open' | 'closed';
+  }): Promise<ToolResponse> {
+    const tempFile = 'comment_body.md';
+
+    try {
+      // ステータスの変更が指定されている場合は先に処理
+      if (args.state) {
+        try {
+          const command = args.state === 'closed' ? 'close' : 'reopen';
+          await execAsync(
+            `gh issue ${command} ${args.issue_number} --repo ${args.repo}`
+          );
+  ```
+
+  ## Exploitation Proof of Concept
+
+  When LLMs are tricked through prompt injection (and other techniques and attack vectors) to call the tool with input that uses special shell characters such as `; rm -rf /tmp;#` (be careful actually executing this payload) and other payload variations, the full command-line text will be interepted by the shell and result in other commands except of `ps` executing on the host running the MCP Server.
+
+  Reference example from prior security research on this topic, demonstrating how a similarly vulnerable MCP Server connected to Cursor is abused with prompt injection to bypass the developer's intended command:
+
+  ![Cursor defined MCP Server vulnerable to command injection](https://res.cloudinary.com/snyk/image/upload/f_auto,w_2560,q_auto/v1747081395/Screenshot_2025-05-07_at_9.22.11_AM_d76kvm.png)
+
+  ## Impact
+
+  User initiated and remote command injection on a running MCP Server.
+
+  ## Recommendation
+
+  - Don't use `exec`. Use `execFile` instead, which pins the command and provides the arguments as array elements.
+  - If the user input is not a command-line flag, use the `--` notation to terminate command and command-line flag, and indicate that the text after the `--` double dash notation is benign value.
+
+  ## References and Prior work
+
+  1. [Exploiting MCP Servers Vulnerable to Command Injection](https://snyk.io/articles/exploiting-mcp-servers-vulnerable-to-command-injection/)
+  2. Liran's [Node.js Secure Coding: Defending Against Command Injection Vulnerabilities](https://www.nodejs-security.com/book/command-injection)
+
+  ## Credit
+
+  Disclosed by [Liran Tal](https://lirantal.com)
+severities:
+  - score: '0.00217'
+    scoring_system: epss
+    scoring_elements: '0.44335'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00217'
+    scoring_system: epss
+    scoring_elements: '0.44285'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00332'
+    scoring_system: epss
+    scoring_elements: '0.55468'
+    published_at: '2025-07-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00332'
+    scoring_system: epss
+    scoring_elements: '0.55472'
+    published_at: '2025-07-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00332'
+    scoring_system: epss
+    scoring_elements: '0.55462'
+    published_at: '2025-07-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63049'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63026'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63035'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63023'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.6298'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.62979'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.62931'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.62949'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.62945'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63077'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00455'
+    scoring_system: epss
+    scoring_elements: '0.63065'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00468'
+    scoring_system: epss
+    scoring_elements: '0.63474'
+    published_at: '2025-07-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00468'
+    scoring_system: epss
+    scoring_elements: '0.63484'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00468'
+    scoring_system: epss
+    scoring_elements: '0.63464'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00468'
+    scoring_system: epss
+    scoring_elements: '0.63471'
+    published_at: '2025-07-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00468'
+    scoring_system: epss
+    scoring_elements: '0.63442'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64042'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.6415'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64156'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.63986'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.63992'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.6396'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.63969'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64013'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64024'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64018'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64014'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64005'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64047'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64056'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64067'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64211'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64201'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.63987'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.6403'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.6404'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64058'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64043'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: '0.00476'
+    scoring_system: epss
+    scoring_elements: '0.64034'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-6jx8-rcjx-vmwf
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server
+  - score: '8.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-07-15T13:27:10Z/
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8
+  - score: '8.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/tool-handlers.ts#L79
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/tool-handlers.ts#L79
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-07-15T13:27:10Z/
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/tool-handlers.ts#L79
+  - score: '8.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/v0.4.0/src/handlers/comment-handlers.ts#L8-L23
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/v0.4.0/src/handlers/comment-handlers.ts#L8-L23
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-07-15T13:27:10Z/
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/v0.4.0/src/handlers/comment-handlers.ts#L8-L23
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/security/advisories/GHSA-6jx8-rcjx-vmwf
+  - score: '8.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/security/advisories/GHSA-6jx8-rcjx-vmwf
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/security/advisories/GHSA-6jx8-rcjx-vmwf
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:Y/T:T/P:M/B:A/M:M/D:R/2025-07-15T13:27:10Z/
+    published_at: None
+    url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/security/advisories/GHSA-6jx8-rcjx-vmwf
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-53818
+weaknesses:
+  - CWE-78
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-53818
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/comment-handlers.ts#L8
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/main/src/handlers/tool-handlers.ts#L79
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/blob/v0.4.0/src/handlers/comment-handlers.ts#L8-L23
+    reference_type:
+    reference_id:
+  - url: https://github.com/Sunwood-ai-labs/github-kanban-mcp-server/security/advisories/GHSA-6jx8-rcjx-vmwf
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-53818
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-6jx8-rcjx-vmwf
+    reference_type:
+    reference_id: GHSA-6jx8-rcjx-vmwf

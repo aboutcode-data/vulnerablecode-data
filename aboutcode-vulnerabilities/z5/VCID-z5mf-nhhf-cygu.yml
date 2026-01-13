@@ -1,0 +1,174 @@
+vulnerability_id: VCID-z5mf-nhhf-cygu
+aliases:
+  - CVE-2025-68481
+  - GHSA-5j53-63w8-8625
+summary: "FastAPI Users Vulnerable to 1-click Account Takeover in Apps Using FastAPI SSO\n**Description**\n\
+  \nThe OAuth login state tokens are completely stateless and carry no per-request entropy or\
+  \ any data that could link them to the session that initiated the OAuth flow. `generate_state_token()`\
+  \ is always called with an empty `state_data` dict, so the resulting JWT only contains the\
+  \ fixed audience claim plus an expiration timestamp. \\[1\\]\n\n```py\n        state_data:\
+  \ dict[str, str] = {}\n        state = generate_state_token(state_data, state_secret)\n  \
+  \      authorization_url = await oauth_client.get_authorization_url(\n            authorize_redirect_url,\n\
+  \            state,\n            scopes,\n        )\n```\n\n*fastapi\\_users/router/oauth.py:65-71*\n\
+  \nOn callback, the library merely checks that the JWT verifies under `state_secret` and is\
+  \ unexpired; there is no attempt to match the state value to the browser that initiated the\
+  \ OAuth request, no correlation cookie, and no server-side cache. \\[2\\]\n\n```py\n     \
+  \   try:\n            decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])\n        except\
+  \ jwt.DecodeError:\n            raise HTTPException(\n                status_code=status.HTTP_400_BAD_REQUEST,\n\
+  \                detail=ErrorCode.ACCESS_TOKEN_DECODE_ERROR,\n            )\n        except\
+  \ jwt.ExpiredSignatureError:\n            raise HTTPException(\n                status_code=status.HTTP_400_BAD_REQUEST,\n\
+  \                detail=ErrorCode.ACCESS_TOKEN_ALREADY_EXPIRED,\n            )\n```\n\n*fastapi\\\
+  _users/router/oauth.py:130-141*\n\nAny attacker can hit `/authorize`, capture the server-generated\
+  \ state, finish the upstream OAuth flow with their own provider account, and then trick a\
+  \ victim into loading `.../callback?code=<attacker_code>&state=<attacker_state>`. Because\
+  \ the state JWT is valid for any client for \\~1 hour, the victim’s browser will complete\
+  \ the flow. This leads to login CSRF. Depending on the app’s logic, the login CSRF can lead\
+  \ to an account takeover of the victim account or to the victim user getting logged in to\
+  \ the attacker's account.\n\n\\[1\\] [https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi\\\
+  _users/router/oauth.py\\#L57](https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L57)\n\
+  \n\\[2\\]  \n[https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi\\\
+  _users/router/oauth.py\\#L111](https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L111)\n\
+  \n**Proof of Concept**\n\nLet’s think of an app \\- AwesomeFastAPIApp. Let’s assume that the\
+  \ AwesomeFastAPIApp has internal logic that uses a `UserManager` different from the default\
+  \ `BaseUserManager.` With this `manager,` when an already logged-in user performs a callback\
+  \ request,  the newly provided SSO identity gets linked to the already existing user that\
+  \ made the request.\n\nThen, an attacker can get account takeover inside the app by performing\
+  \ the following actions:\n\n1\\. They start an SSO OAuth flow, but stop it right before making\
+  \ the callback call to AwesomeFastAPIApp;  \n2\\. The attacker tricks a logged-in user (via\
+  \ phishing, a drive-by attack, etc.) to perform a GET request with the attacker's state value\
+  \ and grant code to the AwesomeFastAPIApp callback. Because the library doesn’t check whether\
+  \ the state token is linked to the session performing the callback, the callback is processed,\
+  \ the grant code is sent to the provider, and the account linking takes place.\n\nAfter the\
+  \ GET request is performed, the attacker's SSO account is linked with the victim's AwesomeFastAPIApp\
+  \ account permanently.\n\n**Suggested Fix**\n\nMake the state a value tied to the session\
+  \ of the user that initiated the OAuth flow, as recommended by the official RFC. \\[3\\]\n\
+  \n\n\\[3\\] [https://www.rfc-editor.org/rfc/rfc6749\\#section-10.12](https://www.rfc-editor.org/rfc/rfc6749#section-10.12)"
+severities:
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.05584'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68481
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.05603'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-68481
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-5j53-63w8-8625
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L111
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L111
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-19T20:39:12Z/
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L111
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L57
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L57
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-19T20:39:12Z/
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L57
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/commit/7cf413cd766b9cb0ab323ce424ddab2c0d235932
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/commit/7cf413cd766b9cb0ab323ce424ddab2c0d235932
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-19T20:39:12Z/
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/commit/7cf413cd766b9cb0ab323ce424ddab2c0d235932
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/security/advisories/GHSA-5j53-63w8-8625
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/security/advisories/GHSA-5j53-63w8-8625
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/security/advisories/GHSA-5j53-63w8-8625
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-12-19T20:39:12Z/
+    published_at: None
+    url: https://github.com/fastapi-users/fastapi-users/security/advisories/GHSA-5j53-63w8-8625
+  - score: '5.9'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68481
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-68481
+weaknesses:
+  - CWE-285
+  - CWE-352
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-68481
+    reference_type:
+    reference_id:
+  - url: https://github.com/fastapi-users/fastapi-users
+    reference_type:
+    reference_id:
+  - url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L111
+    reference_type:
+    reference_id:
+  - url: https://github.com/fastapi-users/fastapi-users/blob/bcee8c9b884de31decb5d799aead3974a0b5b158/fastapi_users/router/oauth.py#L57
+    reference_type:
+    reference_id:
+  - url: https://github.com/fastapi-users/fastapi-users/commit/7cf413cd766b9cb0ab323ce424ddab2c0d235932
+    reference_type:
+    reference_id:
+  - url: https://github.com/fastapi-users/fastapi-users/security/advisories/GHSA-5j53-63w8-8625
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-68481
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-5j53-63w8-8625
+    reference_type:
+    reference_id: GHSA-5j53-63w8-8625

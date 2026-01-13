@@ -1,0 +1,77 @@
+vulnerability_id: VCID-j4bv-ma83-4bca
+aliases:
+  - GHSA-pqhf-p39g-3x64
+summary: |
+  uv allows ZIP payload obfuscation through parsing differentials
+  ### Impact
+
+  In versions 0.9.5 and earlier of uv, ZIP archives were handled in a manner that enabled two parsing differentials against other components of the Python packaging ecosystem:
+
+  1. Central directory entries in a ZIP archive can contain comment fields. However, uv would assume that these fields were not present, since they aren't widely used. Consequently, a ZIP archive could be constructed where uv would interpret the contents of a central directory comment field as ZIP control structures (such as a new central directory entry), rather than skipping over them.
+  2. Both local file entries and central directory entries contain filename fields, which are used to place archive members on disk. These fields are arbitrary sequences of bytes, and may therefore be invalid or ambiguous. For example, they may contain ASCII null bytes, in which case different ZIP extractors behave differently: Python's `zipfile` module truncates the filename at the first null, while uv would skip (not extract) any archive members whose filenames contained nulls. Because of this difference, a ZIP archive could be constructed that would extract differently across different Python package installers.
+
+  In both cases, the outcome is that an attacker may be able to produce a ZIP with a consistent digest that expands differently with different Python package installers.
+
+  Like with GHSA-8qf3-x8v5-2pj8, the impact of these differentials is limited by a number of factors:
+
+  - To be compromised via this vulnerability, user interaction of some sort is required. In particular, the user must run `uv pip install $package` or similar with an attacker-controlled $package.
+  When using wheel distributions, installation of the malicious package is not sufficient for execution of malicious code, the vicim would need to perform a separate invocation, e.g., `python -c "import $package"`.
+  - If a ZIP-based source distribution (which are less common than tarball source distributions), is encountered, malicious code can be executed during package resolution or installation. uv may invoke the malicious code when building the source distribution into a wheel.
+
+  ### Patches
+
+  Versions 0.9.6 and newer of uv address both of the parser differentials above, by properly handling comments in central directory entries and by refusing to process ZIPs that contain filename fields that are unlikely to be interpreted consistently across other ZIP parser implementations.
+
+  ### Workarounds
+
+  Users are advised to upgrade to 0.9.6 or newer to address this advisory.
+
+  Most users should experience no breaking changes as a result of the patch above. However, users who do experience breakage should carefully review their distributions for signs of malicious intent. Users may choose to set `UV_INSECURE_NO_ZIP_VALIDATION=1` to revert to the previous behavior.
+
+  ### Attribution
+
+  This vulnerability was disclosed by Caleb Brown (Google).
+severities:
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-pqhf-p39g-3x64
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/astral-sh/uv
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/astral-sh/uv/commit/da659fee4898a73dbc75070f3e82d49f745e4628
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-20
+  - CWE-436
+references:
+  - url: https://github.com/astral-sh/uv
+    reference_type:
+    reference_id:
+  - url: https://github.com/astral-sh/uv/commit/da659fee4898a73dbc75070f3e82d49f745e4628
+    reference_type:
+    reference_id:
+  - url: https://github.com/astral-sh/uv/security/advisories/GHSA-pqhf-p39g-3x64
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-pqhf-p39g-3x64
+    reference_type:
+    reference_id: GHSA-pqhf-p39g-3x64

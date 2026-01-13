@@ -1,0 +1,217 @@
+vulnerability_id: VCID-vhn6-n2hb-27fc
+aliases:
+  - CVE-2022-50257
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  xen/gntdev: Prevent
+  leaking grants  Prior to this commit, if a grant mapping operation failed partially, some
+  of the entries in the map_ops array would be invalid, whereas all of the entries in the kmap_ops
+  array would be valid. This in turn would cause the following logic in gntdev_map_grant_pages
+  to become invalid:    for (i = 0; i < map->count; i++) {     if (map->map_ops[i].status ==
+  GNTST_okay) {       map->unmap_ops[i].handle = map->map_ops[i].handle;       if (!use_ptemod)         alloced++;     }     if
+  (use_ptemod) {       if (map->kmap_ops[i].status == GNTST_okay) {         if (map->map_ops[i].status
+  == GNTST_okay)           alloced++;         map->kunmap_ops[i].handle = map->kmap_ops[i].handle;       }     }   }   ...   atomic_add(alloced,
+  &map->live_grants);  Assume that use_ptemod is true (i.e., the domain mapping the granted
+  pages is a paravirtualized domain). In the code excerpt above, note that the "alloced" variable
+  is only incremented when both kmap_ops[i].status and map_ops[i].status are set to GNTST_okay
+  (i.e., both mapping operations are successful).  However, as also noted above, there are cases
+  where a grant mapping operation fails partially, breaking the assumption of the code excerpt
+  above.  The aforementioned causes map->live_grants to be incorrectly set. In some cases, all
+  of the map_ops mappings fail, but all of the kmap_ops mappings succeed, meaning that live_grants
+  may remain zero. This in turn makes it impossible to unmap the successfully grant-mapped pages
+  pointed to by kmap_ops, because unmap_grant_pages has the following snippet of code at its
+  beginning:    if (atomic_read(&map->live_grants) == 0)     return; /* Nothing to do */  In
+  other cases where only some of the map_ops mappings fail but all kmap_ops mappings succeed,
+  live_grants is made positive, but when the user requests unmapping the grant-mapped pages,
+  __unmap_grant_pages_done will then make map->live_grants negative, because the latter function
+  does not check if all of the pages that were requested to be unmapped were actually unmapped,
+  and the same function unconditionally subtracts "data->count" (i.e., a value that can be greater
+  than map->live_grants) from map->live_grants. The side effects of a negative live_grants value
+  have not been studied.  The net effect of all of this is that grant references are leaked
+  in one of the above conditions. In Qubes OS v4.1 (which uses Xen''s grant mechanism extensively
+  for X11 GUI isolation), this issue manifests itself with warning messages like the following
+  to be printed out by the Linux kernel in the VM that had granted pages (that contain X11 GUI
+  window data) to dom0: "g.e. 0x1234 still pending", especially after the user rapidly resizes
+  GUI VM windows (causing some grant-mapping operations to partially or completely fail, due
+  to the fact that the VM unshares some of the pages as part of the window resizing, making
+  the pages impossible to grant-map from dom0).  The fix for this issue involves counting all
+  successful map_ops and kmap_ops mappings separately, and then adding the sum to live_grants.
+  During unmapping, only the number of successfully unmapped grants is subtracted from live_grants.
+  The code is also modified to check for negative live_grants values after the subtraction and
+  warn the user.'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50257.json
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.03165'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.03164'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.0806'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08102'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08012'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1284'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12998'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12977'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.13012'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12901'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12889'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12939'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1299'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.13006'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12942'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12561'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1267'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12667'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12844'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12845'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14294'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14276'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14207'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14315'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14323'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14281'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14286'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14407'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14359'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '0.00047'
+    scoring_system: epss
+    scoring_elements: '0.14284'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-50257.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-50257
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-50257
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2395354
+    reference_type:
+    reference_id: 2395354

@@ -1,0 +1,138 @@
+vulnerability_id: VCID-pdm5-1zps-vbb2
+aliases:
+  - CVE-2025-65111
+  - GHSA-9m7r-g8hg-x3vr
+summary: |
+  SpiceDB: LookupResources with Multiple Entrypoints across Different Definitions Can Return Incomplete Results
+  ### Impact
+
+  If a schema includes the following characteristics:
+
+  1. Permission defined in terms of a union (`+`)
+  1. That union references the same relation on both sides, but one side arrows to a different permission
+
+  Then you might have missing `LookupResources` results when checking the permission. This only affects `LookupResources`; other APIs calculate permissionship correctly.
+
+  A small concrete example:
+
+  ```
+  relation doer_of_things: user | group#member
+  permission do_the_thing = doer_of_things + doer_of_things->admin
+  ```
+
+  A CheckPermission on `do_the_thing` will return the correct permissionship, but a LookupResources on `do_the_thing` may miss resources.
+
+  #### A Comprehensive Example
+
+  If you have a schema with a structure like this:
+
+  ```
+  definition special_user {}
+
+  definition user {
+    relation special_user_mapping: special_user
+    permission special_user = special_user_mapping
+  }
+  definition group {
+     relation member: user
+     permission membership = member + member->special_user
+  }
+
+  definition system {
+    relation viewer: user | group#membership
+    // This is the problematic permission
+    permission view = viewer + viewer->special_user
+  }
+  ```
+
+  And these relationships:
+  ```
+  system:somesystem#viewer@group:somegroup#membership
+  group:somegroup#member@user:someuser1
+  user:someuser1#special_user_mapping@special_user:specialuser
+  ```
+
+  And you call LookupResources with:
+  ```
+  subject_type: user
+  subject_id: someuser1
+  permission: view
+  resource_type: system
+  ```
+
+  You would expect to receive `system:somesystem` in the results, but you do not.
+
+  Note that this only applies to `LookupResources`; if you `CheckPermission` for that resource specifically, it will return `HasPermission`.
+
+  ### Patches
+
+  The issue is fixed in v1.47.1. Upgrading to this version will remediate this issue.
+severities:
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.13323'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65111
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.13279'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-65111
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authzed/spicedb
+  - score: '2.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/authzed/spicedb/commit/8c2edbe1e7bd3851fa2138f4cc344bfde986dcf2
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authzed/spicedb/commit/8c2edbe1e7bd3851fa2138f4cc344bfde986dcf2
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:Y/T:P/P:M/B:A/M:M/D:T/2025-11-24T17:50:38Z/
+    published_at: None
+    url: https://github.com/authzed/spicedb/commit/8c2edbe1e7bd3851fa2138f4cc344bfde986dcf2
+  - score: '2.9'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/authzed/spicedb/security/advisories/GHSA-9m7r-g8hg-x3vr
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/authzed/spicedb/security/advisories/GHSA-9m7r-g8hg-x3vr
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:Y/T:P/P:M/B:A/M:M/D:T/2025-11-24T17:50:38Z/
+    published_at: None
+    url: https://github.com/authzed/spicedb/security/advisories/GHSA-9m7r-g8hg-x3vr
+  - score: LOW
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-65111
+weaknesses:
+  - CWE-277
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-65111
+    reference_type:
+    reference_id:
+  - url: https://github.com/authzed/spicedb
+    reference_type:
+    reference_id:
+  - url: https://github.com/authzed/spicedb/commit/8c2edbe1e7bd3851fa2138f4cc344bfde986dcf2
+    reference_type:
+    reference_id:
+  - url: https://github.com/authzed/spicedb/security/advisories/GHSA-9m7r-g8hg-x3vr
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-65111
+    reference_type:
+    reference_id:

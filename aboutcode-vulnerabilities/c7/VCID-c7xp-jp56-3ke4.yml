@@ -1,0 +1,64 @@
+vulnerability_id: VCID-c7xp-jp56-3ke4
+aliases:
+  - CVE-2023-54007
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  vmci_host: fix
+  a race condition in vmci_host_poll() causing GPF  During fuzzing, a general protection fault
+  is observed in vmci_host_poll().  general protection fault, probably for non-canonical address
+  0xdffffc0000000019: 0000 [#1] PREEMPT SMP KASAN KASAN: null-ptr-deref in range [0x00000000000000c8-0x00000000000000cf]
+  RIP: 0010:__lock_acquire+0xf3/0x5e00 kernel/locking/lockdep.c:4926 <- omitting registers ->
+  Call Trace:  <TASK>  lock_acquire+0x1a4/0x4a0 kernel/locking/lockdep.c:5672  __raw_spin_lock_irqsave
+  include/linux/spinlock_api_smp.h:110 [inline]  _raw_spin_lock_irqsave+0xb3/0x100 kernel/locking/spinlock.c:162  add_wait_queue+0x3d/0x260
+  kernel/sched/wait.c:22  poll_wait include/linux/poll.h:49 [inline]  vmci_host_poll+0xf8/0x2b0
+  drivers/misc/vmw_vmci/vmci_host.c:174  vfs_poll include/linux/poll.h:88 [inline]  do_pollfd
+  fs/select.c:873 [inline]  do_poll fs/select.c:921 [inline]  do_sys_poll+0xc7c/0x1aa0 fs/select.c:1015  __do_sys_ppoll
+  fs/select.c:1121 [inline]  __se_sys_ppoll+0x2cc/0x330 fs/select.c:1101  do_syscall_x64 arch/x86/entry/common.c:51
+  [inline]  do_syscall_64+0x4e/0xa0 arch/x86/entry/common.c:82  entry_SYSCALL_64_after_hwframe+0x46/0xb0  Example
+  thread interleaving that causes the general protection fault is as follows:  CPU1 (vmci_host_poll)               CPU2
+  (vmci_host_do_init_context) -----                               ----- // Read uninitialized
+  context context = vmci_host_dev->context;                                     // Initialize
+  context                                     vmci_host_dev->context = vmci_ctx_create();                                     vmci_host_dev->ct_type
+  = VMCIOBJ_CONTEXT;  if (vmci_host_dev->ct_type == VMCIOBJ_CONTEXT) {     // Dereferencing
+  the wrong pointer     poll_wait(..., &context->host_context); }  In this scenario, vmci_host_poll()
+  reads vmci_host_dev->context first, and then reads vmci_host_dev->ct_type to check that vmci_host_dev->context
+  is initialized. However, since these two reads are not atomically executed, there is a chance
+  of a race condition as described above.  To fix this race condition, read vmci_host_dev->context
+  after checking the value of vmci_host_dev->ct_type so that vmci_host_poll() always reads an
+  initialized context.'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54007.json
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.0895'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54007
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.08909'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2023-54007
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2023-54007.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2023-54007
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-54007
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2424960
+    reference_type:
+    reference_id: 2424960

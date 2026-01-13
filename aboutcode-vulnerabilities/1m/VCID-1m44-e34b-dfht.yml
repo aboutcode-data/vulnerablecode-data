@@ -1,0 +1,247 @@
+vulnerability_id: VCID-1m44-e34b-dfht
+aliases:
+  - CVE-2025-61911
+  - GHSA-r7r6-cc7p-4v5m
+summary: |
+  python-ldap has sanitization bypass in ldap.filter.escape_filter_chars
+  ### Summary
+  The sanitization method `ldap.filter.escape_filter_chars` can be tricked to skip escaping of special characters when a crafted `list` or `dict` is supplied as the `assertion_value` parameter, and the non-default `escape_mode=1` is configured.
+
+  ### Details
+  The method `ldap.filter.escape_filter_chars` supports 3 different escaping modes. `escape_mode=0` (default) and `escape_mode=2` happen to raise exceptions when a `list` or `dict` object is supplied as the `assertion_value` parameter. However, `escape_mode=1` happily computes without performing adequate logic to ensure a fully escaped return value.
+
+  ### PoC
+  ```
+  >>> import ldap.filter
+  ```
+  **Exploitable**
+  ```
+  >>> ldap.filter.escape_filter_chars(["abc@*()/xyz"], escape_mode=1)
+  'abc@*()/xyz'
+  >>> ldap.filter.escape_filter_chars({"abc@*()/xyz": 1}, escape_mode=1)
+  'abc@*()/xyz'
+  ```
+  **Not exploitable**
+  ```
+  >>> ldap.filter.escape_filter_chars("abc@*()/xyz", escape_mode=1)
+  'abc@\\2a\\28\\29\\2fxyz'
+  >>> ldap.filter.escape_filter_chars(["abc@*()/xyz"], escape_mode=0)
+  Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "/usr/local/lib64/python3.12/site-packages/ldap/filter.py", line 41, in escape_filter_chars
+      s = assertion_value.replace('\\', r'\5c')
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  AttributeError: 'list' object has no attribute 'replace'
+  >>> ldap.filter.escape_filter_chars(["abc@*()/xyz"], escape_mode=2)
+  Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "/usr/local/lib64/python3.12/site-packages/ldap/filter.py", line 36, in escape_filter_chars
+      r.append("\\%02x" % ord(c))
+                          ^^^^^^
+  TypeError: ord() expected a character, but string of length 11 found
+  ```
+  ### Impact
+  If an application relies on the vulnerable method in the `python-ldap` library to escape untrusted user input, an attacker might be able to abuse the vulnerability to launch ldap injection attacks which could potentially disclose or manipulate ldap data meant to be inaccessible to them.
+
+  With Python being a dynamically typed language, and the commonly used `JSON` format supporting `list` and `dict`, it is to be expected that Python applications may commonly forward unchecked and potentially malicious `list` and `dict` objects to the vulnerable sanitization method.
+
+  The vulnerable `escape_mode=1` configuration does not appear to be widely used.
+
+  ### Suggested Fix
+  Add a type check at the start of the `ldap.filter.escape_filter_chars` method to raise an exception when the supplied `assertion_value` parameter is not of type `str`.
+severities:
+  - score: '6.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-61911.json
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.13369'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00045'
+    scoring_system: epss
+    scoring_elements: '0.13418'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.1694'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00053'
+    scoring_system: epss
+    scoring_elements: '0.16955'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18438'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18505'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18477'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18467'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18379'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1844'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.1849'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18436'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18457'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18447'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '0.00059'
+    scoring_system: epss
+    scoring_elements: '0.18469'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+  - score: '6.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-r7r6-cc7p-4v5m
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap
+  - score: '5.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/commit/3957526fb1852e84b90f423d9fef34c7af25b85a
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/commit/3957526fb1852e84b90f423d9fef34c7af25b85a
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T14:57:26Z/
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/commit/3957526fb1852e84b90f423d9fef34c7af25b85a
+  - score: '5.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/releases/tag/python-ldap-3.4.5
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/releases/tag/python-ldap-3.4.5
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T14:57:26Z/
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/releases/tag/python-ldap-3.4.5
+  - score: MODERATE
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/security/advisories/GHSA-r7r6-cc7p-4v5m
+  - score: '5.5'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N/E:P
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/security/advisories/GHSA-r7r6-cc7p-4v5m
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/security/advisories/GHSA-r7r6-cc7p-4v5m
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T14:57:26Z/
+    published_at: None
+    url: https://github.com/python-ldap/python-ldap/security/advisories/GHSA-r7r6-cc7p-4v5m
+  - score: MODERATE
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-61911
+weaknesses:
+  - CWE-1035
+  - CWE-937
+  - CWE-843
+  - CWE-75
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-61911.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-61911
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-61911
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://github.com/python-ldap/python-ldap
+    reference_type:
+    reference_id:
+  - url: https://github.com/python-ldap/python-ldap/commit/3957526fb1852e84b90f423d9fef34c7af25b85a
+    reference_type:
+    reference_id:
+  - url: https://github.com/python-ldap/python-ldap/releases/tag/python-ldap-3.4.5
+    reference_type:
+    reference_id:
+  - url: https://github.com/python-ldap/python-ldap/security/advisories/GHSA-r7r6-cc7p-4v5m
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-61911
+    reference_type:
+    reference_id:
+  - url: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1117858
+    reference_type:
+    reference_id: 1117858
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2403228
+    reference_type:
+    reference_id: 2403228
+  - url: https://github.com/advisories/GHSA-r7r6-cc7p-4v5m
+    reference_type:
+    reference_id: GHSA-r7r6-cc7p-4v5m
+  - url: https://usn.ubuntu.com/7828-1/
+    reference_type:
+    reference_id: USN-7828-1

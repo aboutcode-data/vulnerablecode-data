@@ -1,0 +1,215 @@
+vulnerability_id: VCID-6fs8-8rhv-ubas
+aliases:
+  - CVE-2025-48043
+  - GHSA-7r7f-9xpj-jmr7
+summary: |
+  Ash Framework: Filter authorization misapplies impossible bypass/runtime policies
+  ### Summary
+
+  When using **filter** authorization, two edge cases could cause the policy compiler/authorizer to generate a permissive filter:
+
+  1. **Bypass policies whose condition can never pass at runtime** were compiled as
+     `OR(AND(condition, compiled_policies), NOT(condition))`.
+     If the condition could never be true at runtime, the `NOT(condition)` branch evaluated truthy and the overall expression became permissive.
+
+  2. **Runtime policy scenarios that reduce to “no checks are applicable”** (an empty SAT scenario) were treated as an empty clause and dropped instead of being treated as **`false`**, which could again produce an overly broad (permissive) filter.
+
+  These bugs could allow reads to return records that should have been excluded by policy.
+
+  ### Impact
+
+  Projects that rely on **filter-based authorization** and define:
+
+  * `bypass ... do ... end` blocks whose condition(s) are only resolvable at runtime and can never pass in a given request context, **or**
+  * runtime checks that simplify to an **empty** scenario for a clause
+
+  may unintentionally generate a permissive query filter, potentially returning unauthorized data.
+
+  *Actions primarily affected:* reads guarded by filter policies. Non-filter (e.g., hard forbid) policies are not impacted.
+
+  ### Technical details
+
+  This patch corrects two behaviors:
+
+  * **`Ash.Policy.Policy.compile_policy_expression/1`** now treats **bypass** blocks as
+    `AND(condition_expression, compiled_policies)`
+    instead of `OR(AND(...), NOT(condition_expression))`. This removes the permissive `NOT(condition)` escape hatch when a bypass condition never passes.
+
+  * **`Ash.Policy.Authorizer`** now treats **empty SAT scenarios** (`scenario == %{}`) as **`false`**, ensuring impossible scenarios do not collapse into a no-op and inadvertently widen the filter. The reducer also normalizes `nil` → `false` consistently when building `auto_filter` fragments.
+
+  Relevant changes are in:
+
+  * `lib/ash/policy/policy.ex` (bypass compilation)
+  * `lib/ash/policy/authorizer/authorizer.ex` (scenario handling / auto_filter normalization)
+  * Tests added: `test/policy/filter_condition_test.exs` (`RuntimeFalsyCheck`, `RuntimeBypassResource`) validate the corrected behavior.
+
+  ### Workarounds
+
+  * Avoid `bypass` policies whose conditions are only decidable at runtime and may be perpetually false in some contexts; prefer explicit `authorize_if`/`forbid_if` blocks without `bypass` for those cases.
+  * Add an explicit **final `forbid_if always()`** guard for sensitive reads as a belt-and-suspenders fallback until user can upgrade.
+  * Where feasible, replace runtime-unknown checks with strict/compile-time checks or restructure to avoid empty SAT scenarios.
+
+  ### How to tell if user is affected
+
+  User is likely affected if ALL of the following are true:
+
+  *  Uses **filter authorization**; and
+  * Defines `bypass` block with `access_type :runtime` without any policies after it; or
+  * Defines `bypass` blocks whose conditions are evaluated at runtime (e.g., checks with `strict_check/3` returning `:unknown` and a runtime `check/4` that may never succeed in some contexts) without any policies after it
+
+  A quick sanity test is to issue a read expected to return **no** rows under such a bypass or runtime-falsy condition and verify it indeed returns `[]`. The included test `bypass works with filter policies` demonstrates the corrected, non-permissive behavior.
+severities:
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21183'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.2125'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21491'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21444'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21446'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.2145'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21465'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21461'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21474'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21522'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.215'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21477'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21381'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.2143'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00069'
+    scoring_system: epss
+    scoring_elements: '0.21447'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00125'
+    scoring_system: epss
+    scoring_elements: '0.32449'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: '0.00125'
+    scoring_system: epss
+    scoring_elements: '0.32477'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash
+  - score: '8.6'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/66d81300065b970da0d2f4528354835d2418c7ae
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/66d81300065b970da0d2f4528354835d2418c7ae
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-10T16:33:21Z/
+    published_at: None
+    url: https://github.com/ash-project/ash/commit/66d81300065b970da0d2f4528354835d2418c7ae
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash/releases/tag/v3.6.2
+  - score: '8.6'
+    scoring_system: cvssv4
+    scoring_elements: CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-7r7f-9xpj-jmr7
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-7r7f-9xpj-jmr7
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-10T16:33:21Z/
+    published_at: None
+    url: https://github.com/ash-project/ash/security/advisories/GHSA-7r7f-9xpj-jmr7
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-48043
+weaknesses:
+  - CWE-863
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-48043
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash/commit/66d81300065b970da0d2f4528354835d2418c7ae
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash/releases/tag/v3.6.2
+    reference_type:
+    reference_id:
+  - url: https://github.com/ash-project/ash/security/advisories/GHSA-7r7f-9xpj-jmr7
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-48043
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:a:ash-project:ash:*:*:*:*:*:*:*:*

