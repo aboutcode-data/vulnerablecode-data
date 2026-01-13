@@ -1,0 +1,243 @@
+vulnerability_id: VCID-pjph-xq4s-eubu
+aliases:
+  - CVE-2025-38554
+summary: 'In the Linux kernel, the following vulnerability has been resolved:  mm: fix a UAF
+  when vma->mm is freed after vma->vm_refcnt got dropped  By inducing delays in the right places,
+  Jann Horn created a reproducer for a hard to hit UAF issue that became possible after VMAs
+  were allowed to be recycled by adding SLAB_TYPESAFE_BY_RCU to their cache.  Race description
+  is borrowed from Jann''s discovery report: lock_vma_under_rcu() looks up a VMA locklessly
+  with mas_walk() under rcu_read_lock().  At that point, the VMA may be concurrently freed,
+  and it can be recycled by another process.  vma_start_read() then increments the vma->vm_refcnt
+  (if it is in an acceptable range), and if this succeeds, vma_start_read() can return a recycled
+  VMA.  In this scenario where the VMA has been recycled, lock_vma_under_rcu() will then detect
+  the mismatching ->vm_mm pointer and drop the VMA through vma_end_read(), which calls vma_refcount_put().  vma_refcount_put()
+  drops the refcount and then calls rcuwait_wake_up() using a copy of vma->vm_mm.  This is wrong:
+  It implicitly assumes that the caller is keeping the VMA''s mm alive, but in this scenario
+  the caller has no relation to the VMA''s mm, so the rcuwait_wake_up() can cause UAF.  The
+  diagram depicting the race: T1         T2         T3 ==         ==         == lock_vma_under_rcu   mas_walk           <VMA
+  gets removed from mm>                       mmap                         <the same VMA is
+  reallocated>   vma_start_read     __refcount_inc_not_zero_limited_acquire                       munmap                         __vma_enter_locked                           refcount_add_not_zero   vma_end_read     vma_refcount_put       __refcount_dec_and_test                           rcuwait_wait_event                             <finish
+  operation>       rcuwait_wake_up [UAF]  Note that rcuwait_wait_event() in T3 does not block
+  because refcount was already dropped by T1.  At this point T3 can exit and free the mm causing
+  UAF in T1.  To avoid this we move vma->vm_mm verification into vma_start_read() and grab vma->vm_mm
+  to stabilize it before vma_refcount_put() operation.  [surenb@google.com: v3]'
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-38554.json
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.0245'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02482'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00017'
+    scoring_system: epss
+    scoring_elements: '0.02425'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04245'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.05307'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04222'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04223'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04205'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04185'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.05323'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04246'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04278'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00022'
+    scoring_system: epss
+    scoring_elements: '0.04327'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05136'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0512'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05118'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05104'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05087'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05068'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05056'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05077'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04826'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04836'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04823'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04953'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0496'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.04955'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05128'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05132'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.0517'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05066'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05043'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05114'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05122'
+    published_at: '2025-10-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05416'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05436'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05526'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05512'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: '0.00025'
+    scoring_system: epss
+    scoring_elements: '0.05403'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+  - score: 7
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+weaknesses: []
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2025-38554.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2025-38554
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2389466
+    reference_type:
+    reference_id: 2389466

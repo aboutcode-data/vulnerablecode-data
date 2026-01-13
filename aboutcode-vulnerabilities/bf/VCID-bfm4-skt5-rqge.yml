@@ -1,0 +1,752 @@
+vulnerability_id: VCID-bfm4-skt5-rqge
+aliases:
+  - CVE-2022-49846
+summary: |
+  In the Linux kernel, the following vulnerability has been resolved:
+
+  udf: Fix a slab-out-of-bounds write bug in udf_find_entry()
+
+  Syzbot reported a slab-out-of-bounds Write bug:
+
+  loop0: detected capacity change from 0 to 2048
+  ==================================================================
+  BUG: KASAN: slab-out-of-bounds in udf_find_entry+0x8a5/0x14f0
+  fs/udf/namei.c:253
+  Write of size 105 at addr ffff8880123ff896 by task syz-executor323/3610
+
+  CPU: 0 PID: 3610 Comm: syz-executor323 Not tainted
+  6.1.0-rc2-syzkaller-00105-gb229b6ca5abb #0
+  Hardware name: Google Compute Engine/Google Compute Engine, BIOS
+  Google 10/11/2022
+  Call Trace:
+   <TASK>
+   __dump_stack lib/dump_stack.c:88 [inline]
+   dump_stack_lvl+0x1b1/0x28e lib/dump_stack.c:106
+   print_address_description+0x74/0x340 mm/kasan/report.c:284
+   print_report+0x107/0x1f0 mm/kasan/report.c:395
+   kasan_report+0xcd/0x100 mm/kasan/report.c:495
+   kasan_check_range+0x2a7/0x2e0 mm/kasan/generic.c:189
+   memcpy+0x3c/0x60 mm/kasan/shadow.c:66
+   udf_find_entry+0x8a5/0x14f0 fs/udf/namei.c:253
+   udf_lookup+0xef/0x340 fs/udf/namei.c:309
+   lookup_open fs/namei.c:3391 [inline]
+   open_last_lookups fs/namei.c:3481 [inline]
+   path_openat+0x10e6/0x2df0 fs/namei.c:3710
+   do_filp_open+0x264/0x4f0 fs/namei.c:3740
+   do_sys_openat2+0x124/0x4e0 fs/open.c:1310
+   do_sys_open fs/open.c:1326 [inline]
+   __do_sys_creat fs/open.c:1402 [inline]
+   __se_sys_creat fs/open.c:1396 [inline]
+   __x64_sys_creat+0x11f/0x160 fs/open.c:1396
+   do_syscall_x64 arch/x86/entry/common.c:50 [inline]
+   do_syscall_64+0x3d/0xb0 arch/x86/entry/common.c:80
+   entry_SYSCALL_64_after_hwframe+0x63/0xcd
+  RIP: 0033:0x7ffab0d164d9
+  Code: ff ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 40 00 48 89 f8 48 89
+  f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01
+  f0 ff ff 73 01 c3 48 c7 c1 c0 ff ff ff f7 d8 64 89 01 48
+  RSP: 002b:00007ffe1a7e6bb8 EFLAGS: 00000246 ORIG_RAX: 0000000000000055
+  RAX: ffffffffffffffda RBX: 0000000000000000 RCX: 00007ffab0d164d9
+  RDX: 00007ffab0d164d9 RSI: 0000000000000000 RDI: 0000000020000180
+  RBP: 00007ffab0cd5a10 R08: 0000000000000000 R09: 0000000000000000
+  R10: 00005555573552c0 R11: 0000000000000246 R12: 00007ffab0cd5aa0
+  R13: 0000000000000000 R14: 0000000000000000 R15: 0000000000000000
+   </TASK>
+
+  Allocated by task 3610:
+   kasan_save_stack mm/kasan/common.c:45 [inline]
+   kasan_set_track+0x3d/0x60 mm/kasan/common.c:52
+   ____kasan_kmalloc mm/kasan/common.c:371 [inline]
+   __kasan_kmalloc+0x97/0xb0 mm/kasan/common.c:380
+   kmalloc include/linux/slab.h:576 [inline]
+   udf_find_entry+0x7b6/0x14f0 fs/udf/namei.c:243
+   udf_lookup+0xef/0x340 fs/udf/namei.c:309
+   lookup_open fs/namei.c:3391 [inline]
+   open_last_lookups fs/namei.c:3481 [inline]
+   path_openat+0x10e6/0x2df0 fs/namei.c:3710
+   do_filp_open+0x264/0x4f0 fs/namei.c:3740
+   do_sys_openat2+0x124/0x4e0 fs/open.c:1310
+   do_sys_open fs/open.c:1326 [inline]
+   __do_sys_creat fs/open.c:1402 [inline]
+   __se_sys_creat fs/open.c:1396 [inline]
+   __x64_sys_creat+0x11f/0x160 fs/open.c:1396
+   do_syscall_x64 arch/x86/entry/common.c:50 [inline]
+   do_syscall_64+0x3d/0xb0 arch/x86/entry/common.c:80
+   entry_SYSCALL_64_after_hwframe+0x63/0xcd
+
+  The buggy address belongs to the object at ffff8880123ff800
+   which belongs to the cache kmalloc-256 of size 256
+  The buggy address is located 150 bytes inside of
+   256-byte region [ffff8880123ff800, ffff8880123ff900)
+
+  The buggy address belongs to the physical page:
+  page:ffffea000048ff80 refcount:1 mapcount:0 mapping:0000000000000000
+  index:0x0 pfn:0x123fe
+  head:ffffea000048ff80 order:1 compound_mapcount:0 compound_pincount:0
+  flags: 0xfff00000010200(slab|head|node=0|zone=1|lastcpupid=0x7ff)
+  raw: 00fff00000010200 ffffea00004b8500 dead000000000003 ffff888012041b40
+  raw: 0000000000000000 0000000080100010 00000001ffffffff 0000000000000000
+  page dumped because: kasan: bad access detected
+  page_owner tracks the page as allocated
+  page last allocated via order 0, migratetype Unmovable, gfp_mask 0x0(),
+  pid 1, tgid 1 (swapper/0), ts 1841222404, free_ts 0
+   create_dummy_stack mm/page_owner.c:
+  ---truncated---
+severities:
+  - score: '5.5'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-49846.json
+  - score: '7.0'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-49846.json
+  - score: '7.1'
+    scoring_system: cvssv3
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:H
+    published_at: None
+    url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-49846.json
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01489'
+    published_at: '2025-05-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01494'
+    published_at: '2025-05-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01493'
+    published_at: '2025-05-26 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01448'
+    published_at: '2025-05-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01452'
+    published_at: '2025-05-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01454'
+    published_at: '2025-05-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01459'
+    published_at: '2025-05-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01457'
+    published_at: '2025-05-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01485'
+    published_at: '2025-05-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01487'
+    published_at: '2025-05-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01486'
+    published_at: '2025-05-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01484'
+    published_at: '2025-05-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01469'
+    published_at: '2025-05-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01467'
+    published_at: '2025-05-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01464'
+    published_at: '2025-05-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.0146'
+    published_at: '2025-05-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01549'
+    published_at: '2025-06-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00013'
+    scoring_system: epss
+    scoring_elements: '0.01503'
+    published_at: '2025-05-31 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02029'
+    published_at: '2025-06-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02127'
+    published_at: '2025-06-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02082'
+    published_at: '2025-06-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02093'
+    published_at: '2025-06-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02063'
+    published_at: '2025-06-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02041'
+    published_at: '2025-06-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02027'
+    published_at: '2025-06-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02014'
+    published_at: '2025-06-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02036'
+    published_at: '2025-06-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00015'
+    scoring_system: epss
+    scoring_elements: '0.02179'
+    published_at: '2025-06-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.02797'
+    published_at: '2026-01-11 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00016'
+    scoring_system: epss
+    scoring_elements: '0.02799'
+    published_at: '2026-01-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05072'
+    published_at: '2025-05-05 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05109'
+    published_at: '2025-05-04 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05151'
+    published_at: '2025-05-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05189'
+    published_at: '2025-05-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00024'
+    scoring_system: epss
+    scoring_elements: '0.05076'
+    published_at: '2025-05-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00032'
+    scoring_system: epss
+    scoring_elements: '0.07642'
+    published_at: '2025-05-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08762'
+    published_at: '2025-10-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08429'
+    published_at: '2025-09-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08434'
+    published_at: '2025-09-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08593'
+    published_at: '2025-10-01 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08535'
+    published_at: '2025-10-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08595'
+    published_at: '2025-10-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08586'
+    published_at: '2025-10-06 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08566'
+    published_at: '2025-10-07 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08616'
+    published_at: '2025-10-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08696'
+    published_at: '2025-10-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08746'
+    published_at: '2025-10-30 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08745'
+    published_at: '2025-10-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08688'
+    published_at: '2025-10-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08652'
+    published_at: '2025-10-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08625'
+    published_at: '2025-10-20 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08754'
+    published_at: '2025-10-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08687'
+    published_at: '2025-10-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08692'
+    published_at: '2025-10-25 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08708'
+    published_at: '2025-10-28 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08726'
+    published_at: '2025-10-29 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08841'
+    published_at: '2025-11-02 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00033'
+    scoring_system: epss
+    scoring_elements: '0.08799'
+    published_at: '2025-11-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00035'
+    scoring_system: epss
+    scoring_elements: '0.08968'
+    published_at: '2025-09-27 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00037'
+    scoring_system: epss
+    scoring_elements: '0.09924'
+    published_at: '2025-07-03 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12353'
+    published_at: '2025-07-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12427'
+    published_at: '2025-07-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12461'
+    published_at: '2025-07-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12428'
+    published_at: '2025-07-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11978'
+    published_at: '2025-08-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11959'
+    published_at: '2025-08-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11905'
+    published_at: '2025-08-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11923'
+    published_at: '2025-08-15 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11907'
+    published_at: '2025-08-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11883'
+    published_at: '2025-08-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.11859'
+    published_at: '2025-08-12 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12264'
+    published_at: '2025-07-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12281'
+    published_at: '2025-07-21 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12349'
+    published_at: '2025-07-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.12356'
+    published_at: '2025-07-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00043'
+    scoring_system: epss
+    scoring_elements: '0.1239'
+    published_at: '2025-07-16 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.1736'
+    published_at: '2025-09-17 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17379'
+    published_at: '2025-09-18 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17406'
+    published_at: '2025-09-19 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17295'
+    published_at: '2025-09-22 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17394'
+    published_at: '2025-09-23 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17391'
+    published_at: '2025-09-24 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17232'
+    published_at: '2025-09-08 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17226'
+    published_at: '2025-09-09 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17277'
+    published_at: '2025-09-10 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17338'
+    published_at: '2025-09-13 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '0.00055'
+    scoring_system: epss
+    scoring_elements: '0.17273'
+    published_at: '2025-09-14 12:55:00+00:00'
+    url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+  - score: '5.5'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H
+    published_at: None
+    url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/03f9582a6a2ebd25a440896475c968428c4b63e7
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/03f9582a6a2ebd25a440896475c968428c4b63e7
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/583fdd98d94acba1e7225e5cc29063aef0741030
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/583fdd98d94acba1e7225e5cc29063aef0741030
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/7a6051d734f1ed0031e2216f9a538621235c11a4
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/7a6051d734f1ed0031e2216f9a538621235c11a4
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/ac79001b8e603226fab17240a79cb9ef679d3cd9
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/ac79001b8e603226fab17240a79cb9ef679d3cd9
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/c736ed8541605e3a25075bb1cbf8f38cb3083238
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/c736ed8541605e3a25075bb1cbf8f38cb3083238
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/c8af247de385ce49afabc3bf1cf4fd455c94bfe8
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/c8af247de385ce49afabc3bf1cf4fd455c94bfe8
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/d8971f410739a864c537e0ac29344a7b6c450232
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/d8971f410739a864c537e0ac29344a7b6c450232
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://git.kernel.org/stable/c/f1517721c408631f09d54c743aa70cb07fd3eebd
+  - score: Track
+    scoring_system: ssvc
+    scoring_elements: SSVCv2/E:N/A:N/T:T/P:M/B:A/M:M/D:T/2025-10-01T16:59:56Z/
+    published_at: None
+    url: https://git.kernel.org/stable/c/f1517721c408631f09d54c743aa70cb07fd3eebd
+  - score: '7.8'
+    scoring_system: cvssv3.1
+    scoring_elements: CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    published_at: None
+    url: https://nvd.nist.gov/vuln/detail/CVE-2022-49846
+weaknesses:
+  - CWE-787
+references:
+  - url: https://access.redhat.com/hydra/rest/securitydata/cve/CVE-2022-49846.json
+    reference_type:
+    reference_id:
+  - url: https://api.first.org/data/v1/epss?cve=CVE-2022-49846
+    reference_type:
+    reference_id:
+  - url: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-49846
+    reference_type:
+    reference_id:
+  - url: https://ftp.suse.com/pub/projects/security/yaml/suse-cvss-scores.yaml
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/03f9582a6a2ebd25a440896475c968428c4b63e7
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/583fdd98d94acba1e7225e5cc29063aef0741030
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/7a6051d734f1ed0031e2216f9a538621235c11a4
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/ac79001b8e603226fab17240a79cb9ef679d3cd9
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c736ed8541605e3a25075bb1cbf8f38cb3083238
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/c8af247de385ce49afabc3bf1cf4fd455c94bfe8
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/d8971f410739a864c537e0ac29344a7b6c450232
+    reference_type:
+    reference_id:
+  - url: https://git.kernel.org/stable/c/f1517721c408631f09d54c743aa70cb07fd3eebd
+    reference_type:
+    reference_id:
+  - url: https://bugzilla.redhat.com/show_bug.cgi?id=2363432
+    reference_type:
+    reference_id: 2363432
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.1:rc1:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.1:rc1:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.1:rc2:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.1:rc2:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.1:rc3:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.1:rc3:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/search/results?adv_search=true&isCpeNameSearch=true&query=cpe:2.3:o:linux:linux_kernel:6.1:rc4:*:*:*:*:*:*
+    reference_type:
+    reference_id: cpe:2.3:o:linux:linux_kernel:6.1:rc4:*:*:*:*:*:*
+  - url: https://nvd.nist.gov/vuln/detail/CVE-2022-49846
+    reference_type:
+    reference_id: CVE-2022-49846
+  - url: https://access.redhat.com/errata/RHSA-2025:10379
+    reference_type:
+    reference_id: RHSA-2025:10379
+  - url: https://access.redhat.com/errata/RHSA-2025:10669
+    reference_type:
+    reference_id: RHSA-2025:10669
+  - url: https://access.redhat.com/errata/RHSA-2025:10670
+    reference_type:
+    reference_id: RHSA-2025:10670
+  - url: https://access.redhat.com/errata/RHSA-2025:10671
+    reference_type:
+    reference_id: RHSA-2025:10671
+  - url: https://access.redhat.com/errata/RHSA-2025:10673
+    reference_type:
+    reference_id: RHSA-2025:10673
+  - url: https://access.redhat.com/errata/RHSA-2025:10675
+    reference_type:
+    reference_id: RHSA-2025:10675
+  - url: https://access.redhat.com/errata/RHSA-2025:10701
+    reference_type:
+    reference_id: RHSA-2025:10701
+  - url: https://access.redhat.com/errata/RHSA-2025:10761
+    reference_type:
+    reference_id: RHSA-2025:10761
+  - url: https://access.redhat.com/errata/RHSA-2025:10828
+    reference_type:
+    reference_id: RHSA-2025:10828
+  - url: https://access.redhat.com/errata/RHSA-2025:10829
+    reference_type:
+    reference_id: RHSA-2025:10829
+  - url: https://access.redhat.com/errata/RHSA-2025:10830
+    reference_type:
+    reference_id: RHSA-2025:10830
+  - url: https://access.redhat.com/errata/RHSA-2025:10834
+    reference_type:
+    reference_id: RHSA-2025:10834
+  - url: https://access.redhat.com/errata/RHSA-2025:10974
+    reference_type:
+    reference_id: RHSA-2025:10974
+  - url: https://access.redhat.com/errata/RHSA-2025:10976
+    reference_type:
+    reference_id: RHSA-2025:10976
+  - url: https://access.redhat.com/errata/RHSA-2025:10977
+    reference_type:
+    reference_id: RHSA-2025:10977
+  - url: https://access.redhat.com/errata/RHSA-2025:10978
+    reference_type:
+    reference_id: RHSA-2025:10978
+  - url: https://access.redhat.com/errata/RHSA-2025:10979
+    reference_type:
+    reference_id: RHSA-2025:10979
+  - url: https://access.redhat.com/errata/RHSA-2025:10980
+    reference_type:
+    reference_id: RHSA-2025:10980
+  - url: https://access.redhat.com/errata/RHSA-2025:10981
+    reference_type:
+    reference_id: RHSA-2025:10981
